@@ -115,7 +115,6 @@ public class MinecraftDownloader {
             }catch (Exception e) {
                 listener.onDownloadFailed(e);
             }
-            ProgressLayout.clearProgress(ProgressLayout.DOWNLOAD_MINECRAFT);
         });
     }
 
@@ -136,47 +135,56 @@ public class MinecraftDownloader {
         // Put up a dummy progress line, for the activity to start the service and do all the other necessary
         // work to keep the launcher alive. We will replace this line when we will start downloading stuff.
         ProgressLayout.setProgress(ProgressLayout.DOWNLOAD_MINECRAFT, 0, R.string.newdl_starting);
-        SpeedCalculator speedCalculator = new SpeedCalculator();
-
-        mTargetJarFile = createGameJarPath(versionName);
-        mScheduledDownloadTasks = new ArrayList<>();
-        mDeclaredNatives = new ArrayList<>();
-        mProcessedFileCounter = new AtomicLong(0);
-        mProcessedSizeCounter = new AtomicLong(0);
-        mInternetUsageCounter = new AtomicLong(0);
-        mDownloaderThreadException = new AtomicReference<>(null);
-        mUseFileCounter = false;
-
-        downloadAndProcessMetadata(activity, verInfo, versionName);
-
-        ArrayBlockingQueue<Runnable> taskQueue =
-                new ArrayBlockingQueue<>(mScheduledDownloadTasks.size(), false);
-        ThreadPoolExecutor downloaderPool =
-                new ThreadPoolExecutor(4, 4, 500, TimeUnit.MILLISECONDS, taskQueue);
-
-        // I have tried pre-filling the queue directly instead of doing this, but it didn't work.
-        // What a shame.
-        for(DownloaderTask scheduledTask : mScheduledDownloadTasks) downloaderPool.execute(scheduledTask);
-        downloaderPool.shutdown();
-
+        // Own the progress record here: both Amethyst's async path and Snake N3st's
+        // direct installer must release it on success, failure and cancellation.
         try {
-            while (mDownloaderThreadException.get() == null &&
-                    !downloaderPool.awaitTermination(33, TimeUnit.MILLISECONDS)) {
-                double speed = speedCalculator.feed(mInternetUsageCounter.get()) / ONE_MEGABYTE;
-                if(mUseFileCounter) reportProgressFileCounter(speed);
-                else reportProgressSizeCounter(speed);
+            SpeedCalculator speedCalculator = new SpeedCalculator();
+
+            mTargetJarFile = createGameJarPath(versionName);
+            mScheduledDownloadTasks = new ArrayList<>();
+            mDeclaredNatives = new ArrayList<>();
+            mProcessedFileCounter = new AtomicLong(0);
+            mProcessedSizeCounter = new AtomicLong(0);
+            mInternetUsageCounter = new AtomicLong(0);
+            mDownloaderThreadException = new AtomicReference<>(null);
+            mUseFileCounter = false;
+
+            downloadAndProcessMetadata(activity, verInfo, versionName);
+
+            ArrayBlockingQueue<Runnable> taskQueue =
+                    new ArrayBlockingQueue<>(mScheduledDownloadTasks.size(), false);
+            ThreadPoolExecutor downloaderPool =
+                    new ThreadPoolExecutor(4, 4, 500, TimeUnit.MILLISECONDS, taskQueue);
+
+            // I have tried pre-filling the queue directly instead of doing this, but it didn't work.
+            // What a shame.
+            for(DownloaderTask scheduledTask : mScheduledDownloadTasks) downloaderPool.execute(scheduledTask);
+            downloaderPool.shutdown();
+
+            try {
+                while (mDownloaderThreadException.get() == null &&
+                        !downloaderPool.awaitTermination(33, TimeUnit.MILLISECONDS)) {
+                    double speed = speedCalculator.feed(mInternetUsageCounter.get()) / ONE_MEGABYTE;
+                    if(mUseFileCounter) reportProgressFileCounter(speed);
+                    else reportProgressSizeCounter(speed);
+                }
+                Exception thrownException = mDownloaderThreadException.get();
+                if(thrownException != null) {
+                    throw thrownException;
+                } else {
+                    ensureJarFileCopy();
+                    extractNatives(versionName);
+                }
+            }catch (InterruptedException e) {
+                // Interrupted while waiting, which means that the download was cancelled.
+                // Kill all downloading threads immediately, and ignore any exceptions thrown by them
+                downloaderPool.shutdownNow();
+                throw e;
+            } finally {
+                downloaderPool.shutdownNow();
             }
-            Exception thrownException = mDownloaderThreadException.get();
-            if(thrownException != null) {
-                throw thrownException;
-            } else {
-                ensureJarFileCopy();
-                extractNatives(versionName);
-            }
-        }catch (InterruptedException e) {
-            // Interrupted while waiting, which means that the download was cancelled.
-            // Kill all downloading threads immediately, and ignore any exceptions thrown by them
-            downloaderPool.shutdownNow();
+        } finally {
+            ProgressLayout.clearProgress(ProgressLayout.DOWNLOAD_MINECRAFT);
         }
     }
 
