@@ -35,14 +35,39 @@ public final class Sn3GameBridge {
             if ((c.getPackageName() + ":game").equals(info.processName)) return true;
         return false;
     }
+    private record PreparedLaunch(String version, ModpackSettings settings) { }
+
+    /** Installs the selected pack and its game runtime without starting Minecraft. */
+    static void install(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
+        prepare(activity, r, slug);
+    }
+
     static void launch(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
+        PreparedLaunch prepared = prepare(activity, r, slug);
+        if (prepared == null) return;
+        String version = prepared.version();
+        ModpackSettings settings = prepared.settings();
+        if (r.pinKey != null) SensitiveFileVault.decryptAll(r.instance(slug), r.pinKey);
+        Intent game = new Intent(activity, MainActivity.class);
+        game.putExtra(MainActivity.INTENT_MINECRAFT_VERSION, version);
+        game.putExtra(SEED, r.session.key().seed()); game.putExtra(MEMORY, settings.memoryMb());
+        if (r.pinKey != null) game.putExtra(PIN, r.pinKey.getEncoded());
+        if (Thread.currentThread().isInterrupted()) { r.sealAll(); throw new InterruptedException(); }
+        if (activity.isFinishing() || activity.isDestroyed()) { r.sealAll(); throw new IOException("La préparation est terminée. Rouvre le modpack pour jouer."); }
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing() || activity.isDestroyed()) { r.work("Protection des fichiers…", r::sealAll); return; }
+            activity.startActivity(game);
+        });
+    }
+    private static PreparedLaunch prepare(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
         if (isRunning(activity)) throw new IllegalStateException("Un jeu est déjà en cours. Ferme-le avant de modifier une instance.");
+        r.beginInstallation(slug);
         ModpackManifest m = r.sync(slug, false);
         r.status = "Vérification des mods…"; r.changed(); r.checkBlacklist(slug);
         String username = r.auth().fetchUsername(r.requireSession());
         if (!username.matches("[A-Za-z0-9_]{1,16}")) throw new IllegalStateException("Pseudo Minecraft invalide.");
         String version = prepareLoader(activity, r, m);
-        if (version == null) return;
+        if (version == null) return null;
         String json = DownloadUtils.downloadString(LauncherPreferences.PREF_VERSION_REPOS);
         JMinecraftVersionList list = Tools.GLOBAL_GSON.fromJson(json, JMinecraftVersionList.class);
         ExtraCore.setValue(ExtraConstants.RELEASE_TABLE, list);
@@ -66,19 +91,13 @@ public final class Sn3GameBridge {
         account.save(new File(Tools.DIR_ACCOUNT_NEW, accountFile + ".json").toString());
         PojavProfile.setCurrentProfile(activity, accountFile);
         r.status = "Installation de Minecraft et du runtime…"; r.changed();
+        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1,
+                R.string.sn3_install_minecraft);
         new MinecraftDownloader().installSnakeVersion(activity, metadata, version);
-        if (r.pinKey != null) SensitiveFileVault.decryptAll(r.instance(slug), r.pinKey);
-        Intent game = new Intent(activity, MainActivity.class);
-        game.putExtra(MainActivity.INTENT_MINECRAFT_VERSION, version);
-        game.putExtra(SEED, r.session.key().seed()); game.putExtra(MEMORY, settings.memoryMb());
-        if (r.pinKey != null) game.putExtra(PIN, r.pinKey.getEncoded());
-        if (Thread.currentThread().isInterrupted()) { r.sealAll(); throw new InterruptedException(); }
-        if (activity.isFinishing() || activity.isDestroyed()) { r.sealAll(); throw new IOException("La préparation est terminée. Rouvre le modpack pour jouer."); }
-        activity.runOnUiThread(() -> {
-            if (activity.isFinishing() || activity.isDestroyed()) { r.work("Protection des fichiers…", r::sealAll); return; }
-            activity.startActivity(game);
-        });
+        r.markInstalled(slug, version);
+        return new PreparedLaunch(version, settings);
     }
+
     private static String prepareLoader(LauncherActivity activity, SnakeRepository r, ModpackManifest m) throws Exception {
         if (!m.mcVersion().matches("[A-Za-z0-9_.+-]+")) throw new IOException("Version Minecraft invalide");
         String loader = m.loader().toLowerCase(Locale.ROOT);

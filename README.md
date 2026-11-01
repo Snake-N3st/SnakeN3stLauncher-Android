@@ -47,9 +47,10 @@ Le script de compilation impose `nice -n 19`, la priorité disque inactive si di
 - Session chiffrée avec une clé non exportable Android Keystore ; sauvegarde Android désactivée. PIN optionnel et fichiers `.cryptlist` protégés.
 - Sélecteur dérivé du menu Amethyst avec les icônes réelles des modpacks. Catalogue, canaux, version épinglée, installation, mise à jour et réparation. Synchronisation par SHA-256, écritures atomiques, `.filesmetas` et fusion des réglages.
 - Chaîne de confiance des manifestes, mémorisation des certificats et protection contre les retours à une signature absente ou un certificat antérieur.
+- Bouton **Installer** pour un modpack absent ou incomplet, puis **Jouer** après installation complète. Désinstallation confirmée de l’instance et de son profil, y compris ses mondes et réglages locaux ; les autres instances et les ressources partagées sont conservées.
 - Instances indépendantes ; mémoire et arguments JVM par modpack. Le jeton est transmis à la JVM en mémoire et n’est pas enregistré dans les profils ni affiché par les journaux du launcher.
 - Installation Vanilla/Fabric/Quilt et raccordement aux installateurs Forge/NeoForge d’Amethyst. Pour Forge/NeoForge, terminer l’installateur puis toucher Jouer à nouveau.
-- Liste des mods, activation/désactivation des ajouts personnels, recherche Modrinth, choix de version compatible, dépendances obligatoires et empreintes vérifiées. Vérification de la blacklist serveur avant lancement et installation d’un ajout.
+- Écran de gestion intégré à Amethyst : onglets Instance, Mods et Modrinth, progression des téléchargements, activation/désactivation des ajouts personnels, recherche et choix de version compatible, dépendances obligatoires et empreintes vérifiées. Vérification de la blacklist serveur avant lancement et installation d’un ajout.
 - Actualités Azuriom, consultation des articles et formulaire de rapport de bug volontaire.
 - Contrôles tactiles, paramètres graphiques et gestion des runtimes d’Amethyst accessibles depuis les paramètres.
 

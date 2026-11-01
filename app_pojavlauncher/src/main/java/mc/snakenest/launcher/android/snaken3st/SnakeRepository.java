@@ -29,6 +29,7 @@ final class SnakeRepository {
     final ExecutorService executor = Executors.newSingleThreadExecutor();
     final Handler main = new Handler(Looper.getMainLooper());
     volatile Runnable observer;
+    private final java.util.concurrent.CopyOnWriteArraySet<Runnable> screenObservers = new java.util.concurrent.CopyOnWriteArraySet<>();
     volatile Future<?> task;
     volatile Thread worker;
     volatile boolean cancellationRequested;
@@ -55,7 +56,12 @@ final class SnakeRepository {
         return new ModpackApiClient(http, URI.create(site()), new ModpackManifestVerifier(roots,
                 ModpackTrustState.load(dirs.root().resolve(ModpackTrustState.FILE_NAME))));
     }
-    void changed() { main.post(() -> { Runnable r = observer; if (r != null) r.run(); }); }
+    void addScreenObserver(Runnable observer) { screenObservers.add(observer); }
+    void removeScreenObserver(Runnable observer) { screenObservers.remove(observer); }
+    void changed() { main.post(() -> {
+        Runnable current = observer; if (current != null) current.run();
+        for (Runnable listener : screenObservers) if (listener != current) listener.run();
+    }); }
     interface Work { void run() throws Exception; }
     synchronized void work(String label, Work work) {
         if (busy) return;
@@ -132,6 +138,69 @@ final class SnakeRepository {
             children.filter(Files::isDirectory).forEach(path -> SensitiveFileVault.encryptAll(path, pinKey));
         }
     }
+    void beginInstallation(String slug) {
+        requireSlug(slug);
+        if (!prefs.edit().putBoolean("installing." + slug, true).commit())
+            throw new IllegalStateException("Impossible de mémoriser la préparation du modpack.");
+    }
+    void markInstalled(String slug, String version) {
+        requireSlug(slug);
+        if (version == null || !version.matches("[A-Za-z0-9_.+-]+")) throw new IllegalArgumentException("Version du jeu invalide");
+        if (!prefs.edit().putString("installed." + slug, version).remove("installing." + slug).commit())
+            throw new IllegalStateException("Impossible de mémoriser l’installation terminée.");
+    }
+    boolean isInstalled(String slug) {
+        requireSlug(slug);
+        if (prefs.getBoolean("installing." + slug, false)) return false;
+        Path directory = instance(slug);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(directory)) return false;
+        try {
+            if (new LocalManifestStore().load(directory).isEmpty()) return false;
+            // Read a snapshot rather than reloading/mutating Amethyst's global profile map
+            // while its background installer may be updating it.
+            Path profilesFile = Paths.get(mc.snakenest.launcher.android.Tools.GAME_PROFILES_FILE);
+            if (!Files.isRegularFile(profilesFile)) return false;
+            var profiles = mc.snakenest.launcher.android.Tools.GLOBAL_GSON.fromJson(Files.readString(profilesFile),
+                    mc.snakenest.launcher.android.value.launcherprofiles.MinecraftLauncherProfiles.class);
+            String id = UUID.nameUUIDFromBytes(("sn3:" + slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            var profile = profiles == null || profiles.profiles == null ? null : profiles.profiles.get(id);
+            if (profile == null || profile.lastVersionId == null || !profile.lastVersionId.matches("[A-Za-z0-9_.+-]+")) return false;
+            String completed = prefs.getString("installed." + slug, null);
+            if (completed != null && !completed.equals(profile.lastVersionId)) return false;
+            Path versions = Paths.get(mc.snakenest.launcher.android.Tools.DIR_HOME_VERSION);
+            Path json = versions.resolve(profile.lastVersionId).resolve(profile.lastVersionId + ".json");
+            Path jar = versions.resolve(profile.lastVersionId).resolve(profile.lastVersionId + ".jar");
+            return Files.isRegularFile(json) && Files.size(json) > 0 && Files.isRegularFile(jar) && Files.size(jar) > 0;
+        } catch (Exception exception) { return false; }
+    }
+    void uninstall(String slug) throws Exception {
+        requireSlug(slug);
+        if (Sn3GameBridge.isRunning(context)) throw new IllegalStateException("Ferme Minecraft avant de désinstaller un modpack.");
+        // Leave a failed/interrupted uninstall visibly incomplete, even if its old manifest
+        // survives until the last traversal step. Retrying Installer then repairs it.
+        beginInstallation(slug);
+        InstanceUninstaller.delete(dirs.instances(), slug);
+        Path settings = dirs.modpackSettingsFile(slug);
+        if (Files.isSymbolicLink(settings.getParent())) throw new java.io.IOException("Dossier de réglages non sûr : lien symbolique.");
+        Files.deleteIfExists(settings);
+        String id = UUID.nameUUIDFromBytes(("sn3:" + slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.load();
+        var profileStore = mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.mainProfileJson;
+        profileStore.profiles.remove(id);
+        if (profileStore.profiles.isEmpty()) profileStore.profiles.put(UUID.randomUUID().toString(),
+                mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile.getDefaultProfile());
+        mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.write();
+        var launcherPrefs = mc.snakenest.launcher.android.prefs.LauncherPreferences.DEFAULT_PREF;
+        String current = launcherPrefs.getString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE, "");
+        if (id.equals(current) || !profileStore.profiles.containsKey(current)) launcherPrefs.edit()
+                .putString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE,
+                        profileStore.profiles.keySet().iterator().next()).commit();
+        SharedPreferences.Editor edit = prefs.edit().remove("version." + slug).remove("installed." + slug).remove("installing." + slug);
+        if (slug.equals(prefs.getString("selected-pack", null))) edit.remove("selected-pack");
+        for (String key : prefs.getAll().keySet()) if (key.startsWith("mod." + slug + ".")) edit.remove(key);
+        if (!edit.commit()) throw new java.io.IOException("Les préférences du modpack n’ont pas pu être nettoyées.");
+    }
+
     ModpackSettings settings(String slug) { return new ModpackSettingsStore(dirs).load(slug, ModpackSettings.defaults()); }
     ModpackManifest manifest(String slug) throws Exception {
         requireSlug(slug); ModpackSettings s = settings(slug);

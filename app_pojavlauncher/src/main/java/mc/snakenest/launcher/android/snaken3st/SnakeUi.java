@@ -80,7 +80,7 @@ public final class SnakeUi extends ContextWrapper {
         picker.submitPacks(repo.packs,pack==null?null:pack.slug(),repo.site(),chosen->{
             repo.prefs.edit().putString("selected-pack",chosen.slug()).apply(); render();
         });
-        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.sessionRejected?"Revalider":repo.session==null?"Se connecter":"Jouer");
+        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.sessionRejected?"Revalider":repo.session==null?"Se connecter":pack==null?"Choisir un modpack":repo.isInstalled(pack.slug())?"Jouer":"Installer");
         if(repo.loginUrl!=null && !repo.loginUrl.equals(openedLogin)) { openedLogin=repo.loginUrl; open(openedLogin); }
         if(repo.error!=null && !repo.error.equals(shownError)) { shownError=repo.error; notice("Opération impossible",repo.error); }
     }
@@ -110,7 +110,8 @@ public final class SnakeUi extends ContextWrapper {
         if(repo.session==null || repo.sessionRejected) { account(); return; }
         ModpackSummary pack=selected();
         if(pack==null) { selectPack(); return; }
-        repo.work("Préparation de "+pack.name()+"…",()->Sn3GameBridge.launch(host,repo,pack.slug()));
+        if (repo.isInstalled(pack.slug())) repo.work("Préparation de " + pack.name() + "…", () -> Sn3GameBridge.launch(host, repo, pack.slug()));
+        else ModpackManagerFragment.open(host, pack.slug(), true);
     }
     private void selectPack() {
         if(repo.session==null || repo.sessionRejected) { account(); return; }
@@ -134,79 +135,16 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void idle(Runnable action) { if (repo.busy) return; if (Sn3GameBridge.isRunning(this)) { notice("Jeu en cours", "Ferme Minecraft avant de modifier les instances ou le compte."); return; } action.run(); }
     private void manage(ModpackSummary pack) {
-        new AlertDialog.Builder(this).setTitle(pack.name()).setItems(new String[]{"Installer / mettre à jour", "Réparer", "Mémoire et arguments JVM", "Canal de distribution", "Version précise", "Mods installés", "Rechercher sur Modrinth", "Profil Amethyst"}, (d, index) -> idle(() -> {
-            switch (index) {
-                case 0: repo.work("Synchronisation…", () -> repo.sync(pack.slug(), false)); break;
-                case 1: new AlertDialog.Builder(this).setTitle("Réparer le modpack ?").setMessage("Les fichiers gérés seront retéléchargés. Les réglages personnels protégés par .filesmetas sont conservés.")
-                        .setNegativeButton("Annuler", null).setPositiveButton("Réparer", (x,y) -> repo.work("Réparation…", () -> repo.sync(pack.slug(), true))).show(); break;
-                case 2: packSettings(pack.slug()); break;
-                case 3: channels(pack.slug()); break;
-                case 4: versions(pack.slug()); break;
-                case 5: installedMods(pack.slug()); break;
-                case 6: searchMods(pack.slug()); break;
-                case 7: editAmethystProfile(pack.slug()); break;
-            }
-        })).show();
-    }
-    private void editAmethystProfile(String slug) {
-        repo.work("Préparation du profil…",()->{
-            ModpackManifest manifest=repo.manifest(slug);
-            String id=java.util.UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-            mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.load();
-            var profiles=mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.mainProfileJson.profiles;
-            if(!profiles.containsKey(id)) {
-                var profile=new mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile();
-                profile.name="Snake N3st — "+slug; profile.gameDir=repo.instance(slug).toString();
-                profile.lastVersionId=manifest.mcVersion(); profile.javaArgs=repo.settings(slug).extraJvmArgs();
-                profiles.put(id,profile); mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.write();
-            }
-            mc.snakenest.launcher.android.prefs.LauncherPreferences.DEFAULT_PREF.edit()
-                .putString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();
-            runOnUiThread(()->Tools.swapFragment(host,mc.snakenest.launcher.android.fragments.ProfileEditorFragment.class,
-                mc.snakenest.launcher.android.fragments.ProfileEditorFragment.TAG,null));
-        });
-    }
-    private void packSettings(String slug) {
-        ModpackSettings s = repo.settings(slug);
-        LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20),0,dp(20),0);
-        EditText memory = field(form, "Mémoire (Mo)", String.valueOf(s.memoryMb()), android.text.InputType.TYPE_CLASS_NUMBER);
-        EditText args = field(form, "Arguments JVM", s.extraJvmArgs(), android.text.InputType.TYPE_CLASS_TEXT);
-        new AlertDialog.Builder(this).setTitle("Réglages du modpack").setView(form).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w) -> {
-            try {
-                int mb = Integer.parseInt(memory.getText().toString());
-                if (mb < 256 || mb > Tools.getTotalDeviceMemory(this)) throw new IllegalArgumentException("Mémoire hors limites pour cet appareil.");
-                String jvm = args.getText().toString(); if (jvm.contains("sn3.token")) throw new IllegalArgumentException("Le jeton est géré automatiquement.");
-                new ModpackSettingsStore(repo.dirs).save(slug, new ModpackSettings(mb, jvm, s.channel(), null));
-            } catch (Exception e) { notice("Réglages invalides",e.getMessage()); }
-        }).show();
+        ModpackManagerFragment.open(host, pack.slug(), false);
     }
     private EditText field(LinearLayout parent, String hint, String value, int type) {
         EditText e = new EditText(this); e.setHint(hint); e.setInputType(type); e.setText(value); parent.addView(e); return e;
     }
-    private void channels(String slug) { repo.work("Chargement des canaux…", () -> {
-        var channels = repo.auth().fetchChannels(); String[] labels = new String[channels.size()+1]; labels[0] = "Canal par défaut du site";
-        for (int i=0;i<channels.size();i++) labels[i+1] = channels.get(i).name() + (channels.get(i).restricted() ? " · Accès restreint" : "") + (channels.get(i).isDefault() ? " · Par défaut" : "");
-        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Canal de distribution").setItems(labels,(d,which) -> {
-            ModpackSettings s = repo.settings(slug);
-            new ModpackSettingsStore(repo.dirs).save(slug,new ModpackSettings(s.memoryMb(),s.extraJvmArgs(),which==0?null:channels.get(which-1).name(),null));
-            repo.prefs.edit().remove("version."+slug).apply();
-        }).show());
-    }); }
-    private void versions(String slug) { repo.work("Chargement des versions…", () -> {
-        var versions = repo.api().listVersions(slug,repo.requireSession()); String[] labels = new String[versions.size()+1]; labels[0] = "Suivre le canal";
-        for (int i=0;i<versions.size();i++) labels[i+1] = versions.get(i).version();
-        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Version du modpack").setItems(labels,(d,which) -> {
-            if (which==0) repo.prefs.edit().remove("version."+slug).apply(); else repo.prefs.edit().putString("version."+slug,versions.get(which-1).version()).apply();
-        }).show());
-    }); }
     private void showNews() {
         button(content,"Actualiser les actualités", this::loadNews);
         for (Post post : repo.posts) {
             text(post.title(),22,Color.WHITE); text(post.description(),15,Color.LTGRAY);
-            button(content,"Lire l’article",() -> repo.work("Chargement de l’article…",() -> {
-                Post full = new NewsApiClient(repo.http, URI.create(repo.site())).getPost(post.id());
-                runOnUiThread(() -> notice(full.title(), Html.fromHtml(full.content()==null?"":full.content(),Html.FROM_HTML_MODE_LEGACY).toString()));
-            }));
+            button(content,"Lire l’article",() -> open(post.url()));
         }
     }
     private void loadNews() { repo.work("Chargement des actualités…",() -> {
@@ -245,36 +183,6 @@ public final class SnakeUi extends ContextWrapper {
             if (create) repo.setPin(value.toCharArray()); else repo.unlock(value.toCharArray());
         }).show();
     }
-    private void installedMods(String slug) { repo.work("Lecture des mods…",() -> {
-        Path mods = repo.instance(slug).resolve("mods"); Files.createDirectories(mods);
-        List<Path> files; try(var stream = Files.list(mods)) { files=stream.filter(Files::isRegularFile).sorted().toList(); }
-        String[] labels = files.stream().map(f -> f.getFileName().toString()).toArray(String[]::new);
-        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Mods installés").setItems(labels,(d,which) -> idle(() -> repo.work("Modification du mod…",() -> {
-            Path file=files.get(which); String name=file.getFileName().toString();
-            ModpackManifest m=repo.manifest(slug);
-            for (ManifestFile managed : m.files()) if (managed.path().equals("mods/"+name.replaceFirst("\\.disabled$",""))) throw new IllegalStateException("Ce mod est géré par le modpack. Il sera conservé.");
-            Path target=file.resolveSibling(name.endsWith(".disabled")?name.substring(0,name.length()-9):name+".disabled");
-            Files.move(file,target);
-        }))).setNegativeButton("Fermer",null).setMessage(files.isEmpty()?"Aucun mod installé":"Touche un mod personnel pour l’activer ou le désactiver.").show());
-    }); }
-    private void searchMods(String slug) {
-        LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
-        EditText query=field(form,"Nom du mod","",android.text.InputType.TYPE_CLASS_TEXT);
-        new AlertDialog.Builder(this).setTitle("Modrinth").setView(form).setNegativeButton("Annuler",null).setPositiveButton("Rechercher",(d,w) -> repo.work("Recherche Modrinth…",() -> {
-            var hits=new ModrinthApiClient(repo.http).search(query.getText().toString(),20);
-            String[] labels=hits.stream().map(ModrinthSearchHit::title).toArray(String[]::new);
-            runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Résultats Modrinth").setItems(labels,(x,which) -> chooseModVersion(slug,hits.get(which).projectId())).show());
-        })).show();
-    }
-    private void chooseModVersion(String slug,String project) { repo.work("Versions compatibles…",() -> {
-        ModpackManifest m=repo.manifest(slug);
-        var versions=new ModrinthApiClient(repo.http).versions(project).stream().filter(v->v.isCompatible(m.mcVersion(),m.loader())).toList();
-        if (versions.isEmpty()) throw new IllegalStateException("Aucune version compatible avec ce modpack.");
-        String[] labels=versions.stream().map(ModrinthVersion::versionNumber).toArray(String[]::new);
-        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Installer un mod").setItems(labels,(d,which) -> idle(() -> new AlertDialog.Builder(this).setTitle("Installer ce mod ?")
-            .setMessage("Les dépendances obligatoires compatibles seront installées également.").setNegativeButton("Annuler",null)
-            .setPositiveButton("Installer",(x,y)->repo.work("Installation du mod…",()->new SnakeMods(repo).install(slug,m,versions.get(which)))).show())).show());
-    }); }
     private void reportBug() {
         LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20),0,dp(20),0);
         EditText summary=field(form,"Résumé","",android.text.InputType.TYPE_CLASS_TEXT);

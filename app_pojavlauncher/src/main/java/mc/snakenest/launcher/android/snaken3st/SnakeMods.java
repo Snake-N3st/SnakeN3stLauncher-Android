@@ -17,6 +17,12 @@ final class SnakeMods {
     private List<ModBlacklistEntry> blacklist;
     SnakeMods(SnakeRepository r) { this.r=r; api=new ModrinthApiClient(r.http); }
     void install(String slug, ModpackManifest m, ModrinthVersion v) throws Exception { blacklist=r.api().getBlacklist(slug,r.requireSession()); install(slug,m,v,new HashSet<>()); }
+    private void downloadProgress(String name, long received, long total, boolean verified) {
+        int percent = verified ? 100 : total > 0 ? (int)Math.min(99, received * 99.0 / total) : 0;
+        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", percent,
+                mc.snakenest.launcher.android.R.string.sn3_download_mod_progress,
+                name, received / 1048576.0, total / 1048576.0);
+    }
     private void install(String slug,ModpackManifest m,ModrinthVersion v,Set<String> seen) throws Exception {
         if(!seen.add(v.id())) return;
         if(!v.isCompatible(m.mcVersion(),m.loader())) throw new IOException("Mod incompatible : "+v.name());
@@ -40,6 +46,9 @@ final class SnakeMods {
         Path temporary=Files.createTempFile(mods,"sn3-mod-",".tmp");
         try {
             MessageDigest digest=MessageDigest.getInstance(algorithm); long size=0;
+            long lastProgress = 0;
+            r.status = "Téléchargement : " + name; r.changed();
+            downloadProgress(name, 0, file.size(), false);
             try(RawResponse response=r.http.getRaw(URI.create(file.url()))) {
                 if(!response.isSuccess()) throw new IOException("Téléchargement du mod refusé");
                 try(InputStream in=response.body(); OutputStream out=Files.newOutputStream(temporary)) {
@@ -48,6 +57,10 @@ final class SnakeMods {
                         if(Thread.currentThread().isInterrupted()) throw new InterruptedException();
                         size+=count; if(size>file.size()) throw new IOException("Taille du mod inattendue");
                         digest.update(buffer,0,count); out.write(buffer,0,count);
+                        long now = System.nanoTime();
+                        if (now - lastProgress >= 100_000_000L) {
+                            downloadProgress(name, size, file.size(), false); lastProgress = now;
+                        }
                     }
                 }
             }
@@ -63,6 +76,7 @@ final class SnakeMods {
                 if(!managed) Files.deleteIfExists(mods.resolve(old));
             }
             r.prefs.edit().putString("mod."+slug+"."+v.projectId(),name).apply();
+            downloadProgress(name, size, file.size(), true);
         } finally { Files.deleteIfExists(temporary); }
     }
 }
