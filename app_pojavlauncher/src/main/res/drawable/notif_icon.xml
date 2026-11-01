@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome outline of the official square SN mark, for Android status-bar tinting. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <group android:scaleX="0.042" android:scaleY="0.042" android:translateX="1.4" android:translateY="1.4">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M82,94L246,92L263,130L242,192L139,194L130,210L232,210L256,252L233,357L190,405L21,404L0,365L17,278L61,278L25,239L22,225L41,128Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M269,124L324,124L340,153L349,187L373,189L379,158L402,123L472,123L505,369L479,410L413,411L398,386L391,314L374,310L364,338L340,409L264,411L242,375L258,316L260,168Z" />
+    </group>
+</vector>

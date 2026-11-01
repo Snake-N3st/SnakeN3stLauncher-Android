@@ -659,7 +659,7 @@ public final class Tools {
             if(minecraftProfile.gameDir.startsWith(Tools.LAUNCHERPROFILES_RTPREFIX))
                 return new File(minecraftProfile.gameDir.replace(Tools.LAUNCHERPROFILES_RTPREFIX,Tools.DIR_GAME_HOME+"/"));
             else
-                return new File(Tools.DIR_GAME_HOME,minecraftProfile.gameDir);
+                return mc.snakenest.launcher.game.GameDirectoryPaths.resolve(Tools.DIR_GAME_HOME, minecraftProfile.gameDir);
         }
         return new File(Tools.DIR_GAME_NEW);
     }

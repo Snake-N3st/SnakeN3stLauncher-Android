@@ -26,20 +26,25 @@ public final class ModpackFileDownloader {
     private final ModpackApiClient api;
     private final HttpJsonClient http;
     private final Path blobCache;
+    private final java.util.function.LongConsumer onBytes;
 
     public ModpackFileDownloader(ModpackApiClient api, HttpJsonClient http) {
-        this(api, http, null);
+        this(api, http, null, ignored -> { });
     }
 
-    private ModpackFileDownloader(ModpackApiClient api, HttpJsonClient http, Path blobCache) {
-        this.api = api; this.http = http; this.blobCache = blobCache;
+    private ModpackFileDownloader(ModpackApiClient api, HttpJsonClient http, Path blobCache, java.util.function.LongConsumer onBytes) {
+        this.api = api; this.http = http; this.blobCache = blobCache; this.onBytes = onBytes;
     }
 
-    ModpackFileDownloader withBlobCache(Path cache) { return new ModpackFileDownloader(api, http, cache); }
+    ModpackFileDownloader withBlobCache(Path cache) { return withBlobCache(cache, ignored -> { }); }
+
+    ModpackFileDownloader withBlobCache(Path cache, java.util.function.LongConsumer onBytes) {
+        return new ModpackFileDownloader(api, http, cache, onBytes);
+    }
 
     void prefetch(String slug, java.util.List<ManifestFile> files, PlayerSession session)
             throws IOException, InterruptedException {
-        new ModpackBatchDownloader(api).fetch(slug, files, session, blobCache);
+        new ModpackBatchDownloader(api).fetch(slug, files, session, blobCache, onBytes);
     }
 
     public void download(String slug, ManifestFile file, Path instanceDir, PlayerSession session)
@@ -95,7 +100,19 @@ public final class ModpackFileDownloader {
 
     private RawResponse fetch(String slug, ManifestFile file, PlayerSession session) throws IOException, InterruptedException {
         if (file.url() != null) {
-            return http.getRaw(URI.create(file.url()));
+            RawResponse response = http.getRaw(URI.create(file.url()));
+            return new RawResponse(response.statusCode(), new java.io.FilterInputStream(response.body()) {
+                @Override public int read() throws IOException {
+                    int value = in.read();
+                    if (value != -1) onBytes.accept(1);
+                    return value;
+                }
+                @Override public int read(byte[] buffer, int offset, int length) throws IOException {
+                    int count = in.read(buffer, offset, length);
+                    if (count > 0) onBytes.accept(count);
+                    return count;
+                }
+            });
         }
         if (blobCache != null) {
             Path cached = blobCache.resolve(file.hash().toLowerCase(java.util.Locale.ROOT));

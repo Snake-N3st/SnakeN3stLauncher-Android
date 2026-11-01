@@ -28,6 +28,11 @@ public final class ModpackBatchDownloader {
 
     public void fetch(String slug, List<ManifestFile> files, PlayerSession session, Path cacheDir)
             throws IOException, InterruptedException {
+        fetch(slug, files, session, cacheDir, ignored -> { });
+    }
+
+    public void fetch(String slug, List<ManifestFile> files, PlayerSession session, Path cacheDir,
+                      java.util.function.LongConsumer onBytes) throws IOException, InterruptedException {
         Map<String, ManifestFile> unique = new LinkedHashMap<>();
         for (ManifestFile file : files) {
             checkInterrupted();
@@ -66,7 +71,7 @@ public final class ModpackBatchDownloader {
                     try { size = Long.parseLong(parts[1]); }
                     catch (NumberFormatException e) { throw new IOException("Invalid blob batch size", e); }
                     if (size != unique.get(hash).size()) throw new IOException("Blob batch size differs from manifest for " + hash);
-                    AtomicFiles.writeVerified(cacheDir.resolve(hash), new BlobStream(stream, size), hash);
+                    AtomicFiles.writeVerified(cacheDir.resolve(hash), new BlobStream(stream, size, onBytes), hash);
                 }
                 checkInterrupted();
                 if (stream.read() != -1) throw new IOException("Extra content in blob batch response");
@@ -96,7 +101,10 @@ public final class ModpackBatchDownloader {
     private static final class BlobStream extends InputStream {
         private final InputStream source;
         private long remaining;
-        BlobStream(InputStream source, long size) { this.source = source; this.remaining = size; }
+        private final java.util.function.LongConsumer onBytes;
+        BlobStream(InputStream source, long size, java.util.function.LongConsumer onBytes) {
+            this.source = source; this.remaining = size; this.onBytes = onBytes;
+        }
         @Override public int read() throws IOException {
             byte[] one = new byte[1];
             return read(one, 0, 1) == -1 ? -1 : one[0] & 0xff;
@@ -108,6 +116,7 @@ public final class ModpackBatchDownloader {
             int count = source.read(buffer, offset, (int) Math.min(remaining, length));
             if (count == -1) throw new EOFException("Truncated blob batch content");
             remaining -= count;
+            if (count > 0) onBytes.accept(count);
             return count;
         }
         @Override public void close() { }

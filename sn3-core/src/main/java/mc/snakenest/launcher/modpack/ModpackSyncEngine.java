@@ -62,9 +62,10 @@ public final class ModpackSyncEngine {
 
         Path batchCache = Files.createTempDirectory(instanceDir.toAbsolutePath().getParent(), ".sn3-batch-");
         try {
-            ModpackFileDownloader activeDownloader = downloader.withBlobCache(batchCache);
             List<ManifestFile> requested = new ArrayList<>(plan.toDownload());
             for (MergeAction action : plan.toMerge()) requested.add(action.file());
+            DownloadProgress progress = new DownloadProgress(requested, listener);
+            ModpackFileDownloader activeDownloader = downloader.withBlobCache(batchCache, progress::received);
             activeDownloader.prefetch(slug, requested, session);
             downloadAllInParallel(slug, instanceDir, plan.toDownload(), session, listener, activeDownloader);
 
@@ -75,6 +76,8 @@ public final class ModpackSyncEngine {
                 mergeOne(slug, instanceDir, action, session, activeDownloader);
                 listener.onFileDone(action.file().path());
             }
+
+            progress.complete();
 
             for (String path : plan.toDelete()) {
                 deleteAndPruneEmptyParents(instanceDir, path);
@@ -199,6 +202,43 @@ public final class ModpackSyncEngine {
             throw e;
         }
         throw new IOException("Modpack file download failed", cause);
+    }
+
+    /** Serializes worker callbacks and withholds completion until every network file verifies. */
+    private static final class DownloadProgress {
+        private final SyncProgressListener listener;
+        private final long total;
+        private long received;
+        private long lastNotification = System.nanoTime();
+
+        DownloadProgress(List<ManifestFile> requested, SyncProgressListener listener) throws IOException {
+            this.listener = listener;
+            java.util.Set<String> internal = new java.util.HashSet<>();
+            long sum = 0;
+            try {
+                for (ManifestFile file : requested) {
+                    if (file.size() < 0) throw new IOException("Negative manifest file size");
+                    if (file.url() != null || internal.add(file.hash().toLowerCase(java.util.Locale.ROOT))) {
+                        sum = Math.addExact(sum, file.size());
+                    }
+                }
+            } catch (ArithmeticException e) { throw new IOException("Download size overflow", e); }
+            total = sum;
+            listener.onDownloadProgress(0, total);
+        }
+
+        synchronized void received(long count) {
+            received += count;
+            long now = System.nanoTime();
+            if (now - lastNotification >= 100_000_000L && received < total) {
+                listener.onDownloadProgress(received, total);
+                lastNotification = now;
+            }
+        }
+
+        synchronized void complete() {
+            listener.onDownloadProgress(received, total);
+        }
     }
 
     private void deleteAndPruneEmptyParents(Path instanceDir, String relativePath) throws IOException {

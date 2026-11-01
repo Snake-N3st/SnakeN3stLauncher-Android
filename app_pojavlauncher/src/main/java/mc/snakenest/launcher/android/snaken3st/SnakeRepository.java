@@ -136,10 +136,24 @@ final class SnakeRepository {
             if (repair) new LocalManifestStore().clear(dir);
             new ModpackSyncEngine(new ModpackFileDownloader(api(), http), new LocalManifestStore())
                     .sync(slug, dir, m, requireSession(), new SyncProgressListener() {
-                        public void onFileStarted(String path, long size) { status = "Téléchargement : " + path; changed(); }
+                        private volatile int percent;
+                        public void onFileStarted(String path, long size) {
+                            status = "Application : " + path;
+                            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", percent,
+                                    mc.snakenest.launcher.android.R.string.sn3_apply_file, path);
+                            changed();
+                        }
+                        public void onDownloadProgress(long receivedBytes, long totalBytes) {
+                            percent = totalBytes > 0 ? (int) Math.min(99, 99.0 * receivedBytes / totalBytes) : 0;
+                            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", percent,
+                                    mc.snakenest.launcher.android.R.string.sn3_download_progress,
+                                    receivedBytes / 1048576.0, totalBytes / 1048576.0);
+                        }
                         public void onFileDone(String path) { }
                         public void onDeleted(String path) { }
                     });
+            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", 100,
+                    mc.snakenest.launcher.android.R.string.sn3_apply_done);
         } finally { if (pinKey != null) SensitiveFileVault.encryptAll(dir, pinKey); }
         return m;
     }
