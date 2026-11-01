@@ -127,8 +127,6 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
 
         mUseANGLE.setOnClickListener(v -> mTempProfile.useANGLE = ((CheckBox) v).isChecked());
 
-        // Set up the icon change click listener
-        mProfileIcon.setOnClickListener(v -> CropperUtils.startCropper(mCropperLauncher));
 
         loadValues(LauncherPreferences.DEFAULT_PREF.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, ""), view.getContext());
     }
@@ -175,6 +173,12 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
         mProfileIcon.setImageDrawable(
                 ProfileIconCache.fetchIcon(getResources(), mProfileKey, mTempProfile.icon)
         );
+
+        boolean managedIcon = mc.snakenest.launcher.android.snaken3st.SnakePackIcons.isManagedProfile(context, mProfileKey, mTempProfile);
+        mProfileIcon.setOnClickListener(managedIcon ? null : v -> CropperUtils.startCropper(mCropperLauncher));
+        mProfileIcon.setClickable(!managedIcon);
+        mProfileIcon.getRootView().findViewById(R.id.sn3_profile_icon_edit_badge).setVisibility(managedIcon ? View.GONE : View.VISIBLE);
+        mProfileIcon.setContentDescription(managedIcon ? "Logo fourni par le modpack" : "Changer l’icône du profil");
 
         // Runtime spinner
         List<Runtime> runtimes = MultiRTUtils.getInstalledRuntimes();
@@ -269,6 +273,10 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
         else mTempProfile.pojavRendererName = mRenderNames.get(mDefaultRenderer.getSelectedItemPosition());
 
 
+        if (mc.snakenest.launcher.android.snaken3st.SnakePackIcons.isManagedProfile(requireContext(), mProfileKey, mTempProfile)) {
+            MinecraftProfile live = LauncherProfiles.mainProfileJson.profiles.get(mProfileKey);
+            if (live != null) mTempProfile.icon = live.icon;
+        }
         LauncherProfiles.mainProfileJson.profiles.put(mProfileKey, mTempProfile);
         LauncherProfiles.write();
         ExtraCore.setValue(ExtraConstants.REFRESH_VERSION_SPINNER, mProfileKey);
@@ -276,6 +284,7 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
 
     @Override
     public void onCropped(Bitmap contentBitmap) {
+        if (mc.snakenest.launcher.android.snaken3st.SnakePackIcons.isManagedProfile(requireContext(), mProfileKey, mTempProfile)) return;
         mProfileIcon.setImageBitmap(contentBitmap);
         Log.i("bitmap", "w="+contentBitmap.getWidth() +" h="+contentBitmap.getHeight());
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();

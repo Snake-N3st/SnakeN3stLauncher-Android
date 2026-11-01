@@ -124,6 +124,7 @@ final class SnakeRepository {
         }
         sessionRejected = false;
         packs = api().listModpacks(session);
+        SnakePackIcons.refresh(context, packs, site());
     }
     PlayerSession requireSession() { if (session == null) throw new IllegalStateException("Connecte-toi d’abord."); return session; }
     void logout() { work("Déconnexion…", () -> {

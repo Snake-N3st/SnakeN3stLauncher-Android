@@ -86,6 +86,7 @@ public final class Sn3GameBridge {
         profile.lastVersionId = version; profile.gameDir = r.instance(slug).toString();
         profile.javaArgs = settings.extraJvmArgs() == null ? "" : settings.extraJvmArgs();
         if (profile.javaArgs.contains("sn3.token")) throw new IllegalArgumentException("sn3.token est géré par le launcher.");
+        SnakePackIcons.applyToProfile(activity, slug, profile);
         LauncherProfiles.mainProfileJson.profiles.put(id, profile); LauncherProfiles.write();
         LauncherPreferences.DEFAULT_PREF.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, id).commit();
         MinecraftAccount account = new MinecraftAccount(); account.username = username;

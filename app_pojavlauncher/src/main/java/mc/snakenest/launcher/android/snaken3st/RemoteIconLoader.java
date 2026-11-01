@@ -73,6 +73,14 @@ public final class RemoteIconLoader {
         } catch (RejectedExecutionException e) { finish(key, null); }
     }
 
+    /** Invalidate RAM content when catalogue metadata changes without changing the image URL. */
+    public static void invalidate(String imageUrl, String baseUrl) {
+        try {
+            String key = resolve(imageUrl, baseUrl).toASCIIString();
+            synchronized (LOCK) { CACHE.remove(key); }
+        } catch (RuntimeException ignored) { }
+    }
+
     private static URI resolve(String imageUrl, String baseUrl) {
         if (imageUrl == null || imageUrl.isBlank() || imageUrl.length() > 2048)
             throw new IllegalArgumentException("Image unavailable");

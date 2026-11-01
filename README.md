@@ -45,7 +45,7 @@ Le script de compilation impose `nice -n 19`, la priorité disque inactive si di
 
 - Connexion par validation dans le navigateur, requêtes Ed25519, avatar carré du joueur et révocation à la déconnexion.
 - Session chiffrée avec une clé non exportable Android Keystore ; sauvegarde Android désactivée. PIN optionnel et fichiers `.cryptlist` protégés.
-- Sélecteur dérivé du menu Amethyst avec les icônes réelles des modpacks. Catalogue, canaux, version épinglée, installation, mise à jour et réparation. Synchronisation par SHA-256, écritures atomiques, `.filesmetas` et fusion des réglages.
+- Sélecteur dérivé du menu Amethyst avec les icônes réelles des modpacks. Logos mis en cache durablement dans le format natif des profils Amethyst ; le site contrôle l’icône des profils Snake N3st et son édition manuelle y est désactivée. Catalogue, canaux, version épinglée, installation, mise à jour et réparation. Synchronisation par SHA-256, écritures atomiques, `.filesmetas` et fusion des réglages.
 - Chaîne de confiance des manifestes, mémorisation des certificats et protection contre les retours à une signature absente ou un certificat antérieur.
 - Bouton **Installer** pour un modpack absent ou incomplet, puis **Jouer** après installation complète. Désinstallation confirmée de l’instance et de son profil, y compris ses mondes et réglages locaux ; les autres instances et les ressources partagées sont conservées.
 - Instances indépendantes ; mémoire et arguments JVM par modpack. Le jeton est transmis à la JVM en mémoire et n’est pas enregistré dans les profils ni affiché par les journaux du launcher.

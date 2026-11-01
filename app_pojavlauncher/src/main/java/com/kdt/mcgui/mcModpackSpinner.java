@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import fr.spse.extended_view.ExtendedTextView;
 import mc.snakenest.launcher.android.R;
-import mc.snakenest.launcher.android.snaken3st.RemoteIconLoader;
+import mc.snakenest.launcher.android.snaken3st.SnakePackIcons;
 import mc.snakenest.launcher.modpack.ModpackSummary;
 
 /** Fork of Amethyst's mcVersionSpinner, backed by the Snake N3st catalog. */
@@ -51,10 +51,11 @@ public final class mcModpackSpinner extends ExtendedTextView {
         for(ModpackSummary pack:packs) if(pack.slug().equals(slug)) { selected=pack; break; }
         setText(selected==null?"Choisir un modpack Snake N3st":selected.name());
         String image=selected==null?null:selected.image();
-        String imageKey=origin+"|"+image;
+        ModpackSummary selectedPack = selected;
+        String imageKey=origin+"|"+slug+"|"+image+"|"+(selected==null?null:selected.latestVersion());
         if(!Objects.equals(selectedImage,imageKey)) {
             selectedImage=imageKey; setStartIcon(this,fallback());
-            if(image!=null) RemoteIconLoader.load(getContext(),image,origin,icon->{
+            if(selectedPack!=null) SnakePackIcons.load(getContext(),selectedPack,origin,icon->{
                 if(icon!=null && imageKey.equals(selectedImage)) setStartIcon(this,icon);
             });
         }
@@ -98,10 +99,10 @@ public final class mcModpackSpinner extends ExtendedTextView {
                 (ExtendedTextView)LayoutInflater.from(parent.getContext()).inflate(R.layout.item_version_profile_layout,parent,false);
             ModpackSummary pack=getItem(position); row.setText(pack.name());
             row.setBackgroundColor(pack.slug().equals(selectedSlug)?0x3CFFFFFF:Color.TRANSPARENT);
-            String key=baseUrl+"|"+pack.image();
+            String key=baseUrl+"|"+pack.slug()+"|"+pack.image()+"|"+pack.latestVersion();
             if(!Objects.equals(row.getTag(R.id.sn3_image_url),key)) {
                 row.setTag(R.id.sn3_image_url,key); setStartIcon(row,fallback());
-                if(pack.image()!=null) RemoteIconLoader.load(getContext(),pack.image(),baseUrl,icon->{
+                SnakePackIcons.load(getContext(),pack,baseUrl,icon->{
                     if(icon!=null && key.equals(row.getTag(R.id.sn3_image_url))) setStartIcon(row,icon);
                 });
             }

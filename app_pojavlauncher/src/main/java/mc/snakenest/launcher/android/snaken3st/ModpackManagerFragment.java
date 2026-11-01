@@ -99,7 +99,7 @@ public final class ModpackManagerFragment extends Fragment {
         ((TextView)view.findViewById(R.id.sn3_manager_title)).setText(summary == null ? slug : summary.name());
         ((TextView)view.findViewById(R.id.sn3_manager_description)).setText(summary == null ? "Gérer l’installation et les mods de cette instance." : summary.description());
         ImageView icon = view.findViewById(R.id.sn3_manager_icon);
-        if (summary != null) RemoteIconLoader.load(requireContext(), summary.image(), repo.site(), drawable -> { if (ready() && drawable != null) icon.setImageDrawable(drawable); });
+        if (summary != null) SnakePackIcons.load(requireContext(), summary, repo.site(), drawable -> { if (ready() && drawable != null) icon.setImageDrawable(drawable); });
         install.setOnClickListener(v -> {
             if (repo.busy) repo.cancel();
             else if (repo.isInstalled(slug)) confirmRepair();
@@ -360,7 +360,7 @@ public final class ModpackManagerFragment extends Fragment {
             var profiles = mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.mainProfileJson.profiles;
             if (!profiles.containsKey(id)) {
                 var profile = new mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile(); profile.name = "Snake N3st — "+slug;
-                profile.gameDir = repo.instance(slug).toString(); profile.lastVersionId = manifest.mcVersion(); profile.javaArgs = repo.settings(slug).extraJvmArgs(); profiles.put(id,profile);
+                profile.gameDir = repo.instance(slug).toString(); profile.lastVersionId = manifest.mcVersion(); profile.javaArgs = repo.settings(slug).extraJvmArgs(); SnakePackIcons.applyToProfile(requireContext(),slug,profile); profiles.put(id,profile);
                 mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.write();
             }
             mc.snakenest.launcher.android.prefs.LauncherPreferences.DEFAULT_PREF.edit().putString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();
