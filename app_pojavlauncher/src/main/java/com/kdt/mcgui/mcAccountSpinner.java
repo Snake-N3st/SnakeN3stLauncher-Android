@@ -30,18 +30,18 @@ import androidx.appcompat.widget.AppCompatSpinner;
 import androidx.core.content.res.ResourcesCompat;
 
 
-import net.kdt.pojavlaunch.PojavProfile;
-import net.kdt.pojavlaunch.R;
-import net.kdt.pojavlaunch.Tools;
-import net.kdt.pojavlaunch.authenticator.listener.DoneListener;
-import net.kdt.pojavlaunch.authenticator.listener.ErrorListener;
-import net.kdt.pojavlaunch.authenticator.listener.ProgressListener;
-import net.kdt.pojavlaunch.authenticator.microsoft.PresentedException;
-import net.kdt.pojavlaunch.authenticator.microsoft.MicrosoftBackgroundLogin;
-import net.kdt.pojavlaunch.extra.ExtraConstants;
-import net.kdt.pojavlaunch.extra.ExtraCore;
-import net.kdt.pojavlaunch.extra.ExtraListener;
-import net.kdt.pojavlaunch.value.MinecraftAccount;
+import mc.snakenest.launcher.android.PojavProfile;
+import mc.snakenest.launcher.android.R;
+import mc.snakenest.launcher.android.Tools;
+import mc.snakenest.launcher.android.authenticator.listener.DoneListener;
+import mc.snakenest.launcher.android.authenticator.listener.ErrorListener;
+import mc.snakenest.launcher.android.authenticator.listener.ProgressListener;
+import mc.snakenest.launcher.android.authenticator.microsoft.PresentedException;
+import mc.snakenest.launcher.android.authenticator.microsoft.MicrosoftBackgroundLogin;
+import mc.snakenest.launcher.android.extra.ExtraConstants;
+import mc.snakenest.launcher.android.extra.ExtraCore;
+import mc.snakenest.launcher.android.extra.ExtraListener;
+import mc.snakenest.launcher.android.value.MinecraftAccount;
 
 import java.io.File;
 import java.io.IOException;

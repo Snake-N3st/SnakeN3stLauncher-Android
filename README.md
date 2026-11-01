@@ -1,6 +1,6 @@
 # Snake N3st Launcher — Android
 
-Fork Android d’[Amethyst](https://github.com/AngelAuraMC/Amethyst-Android), avec les services du launcher Snake N3st et une interface Android native. Le moteur Minecraft, les rendus graphiques, les runtimes et les commandes tactiles restent ceux d’Amethyst.
+Fork Android d’[Amethyst](https://github.com/AngelAuraMC/Amethyst-Android), avec les services du launcher Snake N3st et l’interface Amethyst adaptée à Snake N3st. Le moteur Minecraft, les rendus graphiques, les runtimes et les commandes tactiles restent ceux d’Amethyst.
 
 Android 8.0 / API 26 minimum. L’application utilise `mc.snakenest.launcher.android` (`.debug` pour les builds de test), ce qui permet de conserver Amethyst installé à côté.
 

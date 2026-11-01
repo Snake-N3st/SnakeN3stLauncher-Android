@@ -77,7 +77,7 @@ static bool init_hooks() {
 }
 
 JNIEXPORT void JNICALL
-Java_net_kdt_pojavlaunch_utils_JREUtils_initializeHooks(JNIEnv *env, jclass clazz) {
+Java_mc_snakenest_launcher_android_utils_JREUtils_initializeHooks(JNIEnv *env, jclass clazz) {
     bool hooks_ready = init_hooks();
     if(!hooks_ready) {
         LOGE("Failed to initialize native hooks!");

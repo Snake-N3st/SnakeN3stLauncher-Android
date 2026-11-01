@@ -1,6 +1,6 @@
 # Notices du portage Snake N3st
 
-Le code Snake N3st de `sn3-core` et `app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/snaken3st` est porté du dépôt SnakeN3stLauncher du même titulaire et distribué sous GPL-3.0. Une copie de la licence se trouve dans `sn3-core/LICENSE`.
+Le code Snake N3st de `sn3-core` et `app_pojavlauncher/src/main/java/mc/snakenest/launcher/android/snaken3st` est porté du dépôt SnakeN3stLauncher du même titulaire et distribué sous GPL-3.0. Une copie de la licence se trouve dans `sn3-core/LICENSE`.
 
 Dépendances ajoutées :
 

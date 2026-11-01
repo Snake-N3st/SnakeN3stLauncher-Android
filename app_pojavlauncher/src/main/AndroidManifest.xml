@@ -39,7 +39,6 @@
         android:process=":launcher"
         android:resizeableActivity="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".snaken3st.SnakeActivity" android:exported="false" />
         <activity
             android:name=".MissingStorageActivity"
             android:exported="false" />

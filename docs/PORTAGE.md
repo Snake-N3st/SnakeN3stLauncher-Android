@@ -4,7 +4,7 @@ Le portage part de l’état local du launcher PC au 1er novembre 2026, y compri
 
 | Domaine PC | Intégration Android |
 | --- | --- |
-| Swing et pages PC | `SnakeActivity`, interface Android native |
+| Swing et pages PC | Accueil Amethyst existant, services intégrés par `SnakeUi` |
 | `java.net.http.HttpClient` | `HttpURLConnection`, délais bornés, flux fermés, aucune redirection de requête signée |
 | Clé de session sur disque | Android Keystore + AES-GCM, stockage interne `noBackupFilesDir` |
 | PIN / `.cryptlist` | PBKDF2 et chiffrement du cœur ; restauration à la sortie normale et au retour dans le launcher après arrêt du jeu |

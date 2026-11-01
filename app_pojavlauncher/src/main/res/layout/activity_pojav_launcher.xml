@@ -4,10 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent">
+    android:background="@color/background_app">
 
     <com.kdt.mcgui.mcAccountSpinner
         android:id="@+id/account_spinner"
+        android:visibility="invisible"
         android:layout_width="match_parent"
         android:layout_height="@dimen/_52sdp"
 
@@ -15,6 +16,19 @@
         android:dropDownVerticalOffset="@dimen/_52sdp"
 
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/sn3_account_button"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/_52sdp"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/padding_large"
+        android:text="Se connecter à Snake N3st"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:background="@drawable/sn3_account_background"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/setting_button" />
 
     <ImageButton
         android:id="@+id/setting_button"
