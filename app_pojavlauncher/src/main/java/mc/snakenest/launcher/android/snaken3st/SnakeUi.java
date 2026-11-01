@@ -33,7 +33,7 @@ public final class SnakeUi extends ContextWrapper {
             if(event==androidx.lifecycle.Lifecycle.Event.ON_DESTROY && repo.observer==observer) repo.observer=null;
         });
         menu.findViewById(R.id.play_button).setOnClickListener(v -> play());
-        menu.findViewById(R.id.mc_version_spinner).setOnClickListener(v -> selectPack());
+        ((com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner)).setOnEmptyAction(this::selectPack);
         menu.findViewById(R.id.edit_profile_button).setOnClickListener(v -> {
             ModpackSummary pack=selected(); if(pack==null) selectPack(); else manage(pack);
         });
@@ -73,9 +73,12 @@ public final class SnakeUi extends ContextWrapper {
         if(isFinishing()||isDestroyed()) return;
         ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.player==null?"Se connecter à Snake N3st":repo.player.username());
         ModpackSummary pack=selected();
-        ((TextView)menu.findViewById(R.id.mc_version_spinner)).setText(pack==null?"Choisir un modpack Snake N3st":pack.name());
-        var picker=(com.kdt.mcgui.mcVersionSpinner)menu.findViewById(R.id.mc_version_spinner);
-        picker.setCompoundDrawablesRelative(getDrawable(R.drawable.ic_folder),null,picker.getCompoundsDrawables()[2],null);
+        var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
+        account.setAvatar(repo.player==null?null:repo.player.avatar(),repo.site());
+        var picker=(com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner);
+        picker.submitPacks(repo.packs,pack==null?null:pack.slug(),repo.site(),chosen->{
+            repo.prefs.edit().putString("selected-pack",chosen.slug()).apply(); render();
+        });
         ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.session==null?"Se connecter":"Jouer");
         if(repo.loginUrl!=null && !repo.loginUrl.equals(openedLogin)) { openedLogin=repo.loginUrl; open(openedLogin); }
         if(repo.error!=null && !repo.error.equals(shownError)) { shownError=repo.error; notice("Opération impossible",repo.error); }
@@ -103,10 +106,7 @@ public final class SnakeUi extends ContextWrapper {
     private void selectPack() {
         if(repo.session==null) { account(); return; }
         if(repo.packs.isEmpty()) { repo.work("Chargement des modpacks…",repo::refresh); return; }
-        String[] labels=repo.packs.stream().map(ModpackSummary::name).toArray(String[]::new);
-        new AlertDialog.Builder(this).setTitle("Modpacks Snake N3st").setItems(labels,(d,index)->{
-            repo.prefs.edit().putString("selected-pack",repo.packs.get(index).slug()).apply(); render();
-        }).show();
+        ((com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner)).showPicker();
     }
     private void panel(String title,Runnable populate) {
         ScrollView scroll=new ScrollView(this); content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);

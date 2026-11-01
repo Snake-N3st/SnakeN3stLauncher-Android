@@ -17,7 +17,7 @@
 
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
+    <mc.snakenest.launcher.android.snaken3st.SnakeAccountView
         android:id="@+id/sn3_account_button"
         android:layout_width="0dp"
         android:layout_height="@dimen/_52sdp"

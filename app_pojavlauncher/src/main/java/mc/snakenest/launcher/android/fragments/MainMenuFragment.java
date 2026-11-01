@@ -21,7 +21,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
-import com.kdt.mcgui.mcVersionSpinner;
+
 
 import mc.snakenest.launcher.android.CustomControlsActivity;
 import mc.snakenest.launcher.android.R;
@@ -40,7 +40,6 @@ import java.util.List;
 public class MainMenuFragment extends Fragment {
     public static final String TAG = "MainMenuFragment";
 
-    private mcVersionSpinner mVersionSpinner;
     private mc.snakenest.launcher.android.snaken3st.SnakeUi snakeUi;
 
     public MainMenuFragment(){
@@ -58,7 +57,6 @@ public class MainMenuFragment extends Fragment {
 
         ImageButton mEditProfileButton = view.findViewById(R.id.edit_profile_button);
         Button mPlayButton = view.findViewById(R.id.play_button);
-        mVersionSpinner = view.findViewById(R.id.mc_version_spinner);
 
         mNewsButton.setOnClickListener(v -> Tools.openURL(requireActivity(), Tools.URL_HOME));
         mDiscordButton.setOnClickListener(v -> Tools.openURL(requireActivity(), getString(R.string.discord_invite)));
@@ -70,7 +68,6 @@ public class MainMenuFragment extends Fragment {
                 return true;
             });
         } else mInstallJarButton.setOnClickListener(v -> hasNoOnlineProfileDialog(requireActivity()));
-        mEditProfileButton.setOnClickListener(v -> mVersionSpinner.openProfileEditor(requireActivity()));
 
         mPlayButton.setOnClickListener(v -> {
             if (Tools.hasMods("sodium") && !(LauncherPreferences.DEFAULT_PREF.getBoolean("sodium_override", false))) {
@@ -121,7 +118,6 @@ public class MainMenuFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        mVersionSpinner.reloadProfiles();
         if(snakeUi!=null) snakeUi.onResume();
     }
 
