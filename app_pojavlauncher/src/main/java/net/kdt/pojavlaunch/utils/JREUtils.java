@@ -415,7 +415,10 @@ public class JREUtils {
         chdir(gameDirectory == null ? Tools.DIR_GAME_NEW : gameDirectory.getAbsolutePath());
         userArgs.add(0,"java"); //argv[0] is the program name according to C standard.
 
-        final int exitCode = VMLauncher.launchJVM(userArgs.toArray(new String[0]));
+        net.kdt.pojavlaunch.snaken3st.Sn3GameBridge.addToken(activity, gameDirectory, userArgs);
+        final int exitCode;
+        try { exitCode = VMLauncher.launchJVM(userArgs.toArray(new String[0])); }
+        finally { net.kdt.pojavlaunch.snaken3st.Sn3GameBridge.sealAfterExit(activity, gameDirectory); }
         Logger.appendToLog("Java Exit code: " + exitCode);
         if (exitCode != 0) {
             LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder)->

@@ -28,7 +28,7 @@
         android:resource="@xml/game_mode_config" />
     <application
         android:name=".PojavApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:allowNativeHeapPointerTagging="false"
         android:appCategory="game"
         android:hasFragileUserData="true"
@@ -39,6 +39,7 @@
         android:process=":launcher"
         android:resizeableActivity="true"
         android:theme="@style/AppTheme">
+        <activity android:name=".snaken3st.SnakeActivity" android:exported="false" />
         <activity
             android:name=".MissingStorageActivity"
             android:exported="false" />

@@ -405,6 +405,7 @@ public final class Tools {
 
     public static void launchMinecraft(final AppCompatActivity activity, MinecraftAccount minecraftAccount,
                                        MinecraftProfile minecraftProfile, String versionId, int versionJavaRequirement) throws Throwable {
+        net.kdt.pojavlaunch.snaken3st.Sn3GameBridge.applyMemory(activity);
         int freeDeviceMemory = getFreeDeviceMemory(activity);
         int localeString;
         int freeAddressSpace = Architecture.is32BitsDevice() ? getMaxContinuousAddressSpaceSize() : -1;

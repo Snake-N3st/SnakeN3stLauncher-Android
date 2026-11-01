@@ -126,6 +126,12 @@ public class MinecraftDownloader {
      * @param versionName The version ID (necessary)
      * @throws Exception when an exception occurs in the function body or in any of the downloading threads.
      */
+    public void installSnakeVersion(Activity activity, JMinecraftVersionList.Version metadata, String version) throws Exception {
+        if (!net.kdt.pojavlaunch.snaken3st.Sn3GameBridge.hasSession(activity))
+            throw new SecurityException("Snake N3st session required");
+        downloadGame(activity, metadata, version);
+    }
+
     private void downloadGame(Activity activity, JMinecraftVersionList.Version verInfo, String versionName) throws Exception {
         // Put up a dummy progress line, for the activity to start the service and do all the other necessary
         // work to keep the launcher alive. We will replace this line when we will start downloading stuff.
