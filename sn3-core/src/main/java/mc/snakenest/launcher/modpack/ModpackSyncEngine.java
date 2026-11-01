@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +53,18 @@ public final class ModpackSyncEngine {
     public void sync(String slug, Path instanceDir, ModpackManifest targetManifest, PlayerSession session,
                      SyncProgressListener listener, boolean resetPlayerFiles)
             throws IOException, InterruptedException, ModpackApiException {
+        sync(slug, instanceDir, targetManifest, session, listener, resetPlayerFiles, Set.of());
+    }
+
+    /** Local choices suppress only direct-child mod jars; the verified server manifest stays intact. */
+    public void sync(String slug, Path instanceDir, ModpackManifest targetManifest, PlayerSession session,
+                     SyncProgressListener listener, boolean resetPlayerFiles, Set<String> localModPaths)
+            throws IOException, InterruptedException, ModpackApiException {
+        Set<String> ignored = Set.copyOf(localModPaths);
+        for (String path : ignored) {
+            if (!path.startsWith("mods/") || path.substring(5).contains("/")) throw new IllegalArgumentException("Only direct mod jars can be locally overridden");
+            ModOverrides.canonicalFilename(path.substring(5));
+        }
         Files.createDirectories(instanceDir);
 
         // Resolved before anything else and held for the rest of the sync: these rules decide the
@@ -59,6 +74,9 @@ public final class ModpackSyncEngine {
         Optional<StoredManifest> previous = manifestStore.load(instanceDir);
         SyncPlan plan = ManifestDiffer.diff(previous, targetManifest, metas,
                 path -> existsInInstance(instanceDir, path), resetPlayerFiles);
+        plan = new SyncPlan(plan.toDownload().stream().filter(file -> !ignored.contains(file.path())).toList(),
+                plan.toMerge().stream().filter(action -> !ignored.contains(action.file().path())).toList(),
+                plan.toDelete().stream().filter(path -> !ignored.contains(path)).toList());
 
         Path batchCache = Files.createTempDirectory(instanceDir.toAbsolutePath().getParent(), ".sn3-batch-");
         try {
@@ -84,7 +102,14 @@ public final class ModpackSyncEngine {
                 listener.onDeleted(path);
             }
 
-            manifestStore.save(instanceDir, StoredManifest.of(targetManifest));
+            Map<String, String> recorded = new LinkedHashMap<>(StoredManifest.of(targetManifest).pathToHash());
+            Map<String, String> older = previous.map(StoredManifest::pathToHash).orElse(Map.of());
+            // A skipped upstream update was NOT applied. Keep its earlier hash (or no hash)
+            // so re-enabling the official mod later schedules exactly the pending update.
+            for (String path : ignored) if (recorded.containsKey(path)) {
+                if (older.containsKey(path)) recorded.put(path,older.get(path)); else recorded.remove(path);
+            }
+            manifestStore.save(instanceDir, new StoredManifest(targetManifest.version(),recorded));
         } finally {
             try (var files = Files.walk(batchCache)) {
                 for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(file);

@@ -39,11 +39,15 @@ public final class Sn3GameBridge {
 
     /** Installs the selected pack and its game runtime without starting Minecraft. */
     static void install(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
-        prepare(activity, r, slug);
+        prepare(activity, r, slug, false);
+    }
+
+    static void repair(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
+        prepare(activity, r, slug, true);
     }
 
     static void launch(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
-        PreparedLaunch prepared = prepare(activity, r, slug);
+        PreparedLaunch prepared = prepare(activity, r, slug, false);
         if (prepared == null) return;
         String version = prepared.version();
         ModpackSettings settings = prepared.settings();
@@ -59,10 +63,10 @@ public final class Sn3GameBridge {
             activity.startActivity(game);
         });
     }
-    private static PreparedLaunch prepare(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
+    private static PreparedLaunch prepare(LauncherActivity activity, SnakeRepository r, String slug, boolean repair) throws Exception {
         if (isRunning(activity)) throw new IllegalStateException("Un jeu est déjà en cours. Ferme-le avant de modifier une instance.");
         r.beginInstallation(slug);
-        ModpackManifest m = r.sync(slug, false);
+        ModpackManifest m = r.sync(slug, repair);
         r.status = "Vérification des mods…"; r.changed(); r.checkBlacklist(slug);
         String username = r.auth().fetchUsername(r.requireSession());
         if (!username.matches("[A-Za-z0-9_]{1,16}")) throw new IllegalStateException("Pseudo Minecraft invalide.");

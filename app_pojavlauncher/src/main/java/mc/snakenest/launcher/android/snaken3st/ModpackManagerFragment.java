@@ -36,11 +36,14 @@ public final class ModpackManagerFragment extends Fragment {
     private List<ModrinthVersion> versions;
     private List<LocalMod> mods = List.of();
     private LinearLayout content;
+    private TabHost tabs;
+    private final LinearLayout[] pages = new LinearLayout[3];
+    private Path replacedFile;
     private TextView state, progressText, error;
     private ProgressBar progress;
     private Button install, play;
     private final List<View> mutationControls = new ArrayList<>();
-    private record LocalMod(Path file, InstalledModInfo info, boolean managed, String project) { }
+    private record LocalMod(Path file, InstalledModInfo info, boolean managed, String project, android.graphics.Bitmap icon) { }
     private final Runnable observer = () -> {
         if (!ready()) return;
         boolean finished = wasBusy && !repo.busy;
@@ -48,10 +51,10 @@ public final class ModpackManagerFragment extends Fragment {
         if (finished) { scanMods(); renderPage(); }
     };
     private final ProgressListener progressListener = new ProgressListener() {
-        @Override public void onProgressStarted() { onMain(() -> { progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); }); }
+        @Override public void onProgressStarted() { onMain(() -> { progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); }); }
         @Override public void onProgressUpdated(int percent, int resource, Object... arguments) {
             onMain(() -> {
-                progress.setVisibility(View.VISIBLE); progress.setIndeterminate(percent < 0);
+                progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(percent < 0);
                 if (percent >= 0) progress.setProgress(percent);
                 try { progressText.setText(getString(resource, arguments)); }
                 catch (RuntimeException ignored) { progressText.setText(repo.status); }
@@ -66,7 +69,7 @@ public final class ModpackManagerFragment extends Fragment {
             progressListener.onProgressUpdated(percent, resource, arguments);
         }
         @Override public void onProgressEnded() { onMain(() -> {
-            if (repo.busy) { progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); progressText.setText(repo.status); }
+            if (repo.busy) { progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); progressText.setText(repo.status); }
             else { progress.setVisibility(View.GONE); progressText.setText(""); }
         }); }
     };
@@ -89,7 +92,7 @@ public final class ModpackManagerFragment extends Fragment {
     }
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle saved) {
         activity = (LauncherActivity)requireActivity();
-        content = view.findViewById(R.id.sn3_manager_content); state = view.findViewById(R.id.sn3_manager_state);
+        state = view.findViewById(R.id.sn3_manager_state);
         progressText = view.findViewById(R.id.sn3_manager_progress_text); error = view.findViewById(R.id.sn3_manager_error);
         progress = view.findViewById(R.id.sn3_manager_progress); install = view.findViewById(R.id.sn3_manager_install); play = view.findViewById(R.id.sn3_manager_play);
         ModpackSummary summary = repo.packs.stream().filter(pack -> pack.slug().equals(slug)).findFirst().orElse(null);
@@ -99,12 +102,28 @@ public final class ModpackManagerFragment extends Fragment {
         if (summary != null) RemoteIconLoader.load(requireContext(), summary.image(), repo.site(), drawable -> { if (ready() && drawable != null) icon.setImageDrawable(drawable); });
         install.setOnClickListener(v -> {
             if (repo.busy) repo.cancel();
-            else operation("Installation / mise à jour…", () -> Sn3GameBridge.install(host(), repo, slug));
+            else if (repo.isInstalled(slug)) confirmRepair();
+            else operation("Installation…", () -> Sn3GameBridge.install(host(), repo, slug));
         });
         play.setOnClickListener(v -> operation("Préparation du jeu…", () -> Sn3GameBridge.launch(host(), repo, slug)));
-        view.findViewById(R.id.sn3_manager_tab_instance).setOnClickListener(v -> showPage(0));
-        view.findViewById(R.id.sn3_manager_tab_mods).setOnClickListener(v -> showPage(1));
-        view.findViewById(R.id.sn3_manager_tab_search).setOnClickListener(v -> showPage(2));
+        tabs = view.findViewById(R.id.sn3_manager_tabs); tabs.setup();
+        String[] titles = {"Instance", "Mods", "Modrinth"};
+        for (int index = 0; index < titles.length; index++) {
+            final int position = index;
+            TextView indicator = new TextView(requireContext()); indicator.setText(titles[index]);
+            indicator.setTextSize(14); indicator.setGravity(android.view.Gravity.CENTER);
+            indicator.setTextColor(getResources().getColor(R.color.primary_text));
+            indicator.setBackgroundResource(R.drawable.sn3_tab_background);
+            indicator.setLayoutParams(new TabWidget.LayoutParams(0, dp(48), 1));
+            tabs.addTab(tabs.newTabSpec(String.valueOf(index)).setIndicator(indicator).setContent(tag -> {
+                ScrollView scroll = new ScrollView(requireContext()); scroll.setFillViewport(true);
+                LinearLayout panel = new LinearLayout(requireContext()); panel.setOrientation(LinearLayout.VERTICAL);
+                panel.setPadding(dp(12), dp(8), dp(12), dp(16)); scroll.addView(panel);
+                pages[position] = panel; return scroll;
+            }));
+        }
+        tabs.setOnTabChangedListener(tag -> { page = Integer.parseInt(tag); content = pages[page]; renderPage(); });
+        tabs.setCurrentTab(Math.max(0,Math.min(2,page))); content = pages[page];
         updateState(); renderPage(); scanMods();
     }
     @Override public void onResume() {
@@ -129,10 +148,10 @@ public final class ModpackManagerFragment extends Fragment {
         boolean installed = !repo.busy && repo.isInstalled(slug);
         boolean running = Sn3GameBridge.isRunning(requireContext());
         state.setText(repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
-        install.setText(repo.busy ? "Annuler" : installed ? "Mettre à jour" : "Installer");
+        install.setText(repo.busy ? "Annuler" : installed ? "Réparer" : "Installer");
         install.setEnabled(!running); play.setVisibility(installed ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
         error.setText(repo.error); error.setVisibility(repo.error == null ? View.GONE : View.VISIBLE);
-        if (!repo.busy) { progress.setVisibility(View.GONE); progressText.setText(""); }
+        if (!repo.busy) { progress.setVisibility(View.GONE); progressText.setVisibility(View.GONE); progressText.setText(""); }
         for (View control : mutationControls) control.setEnabled(!repo.busy && !running);
     }
     private void operation(String label, SnakeRepository.Work work) {
@@ -141,7 +160,7 @@ public final class ModpackManagerFragment extends Fragment {
         if (repo.session == null || repo.sessionRejected) { error.setText("Reviens au compte pour valider ta connexion avant de continuer."); error.setVisibility(View.VISIBLE); return; }
         repo.work(label, work);
     }
-    private void showPage(int selected) { page = selected; renderPage(); }
+    private void showPage(int selected) { if (tabs.getCurrentTab() == selected) renderPage(); else tabs.setCurrentTab(selected); }
     private void renderPage() {
         if (!ready()) return;
         content.removeAllViews(); mutationControls.clear();
@@ -155,6 +174,7 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private Button button(LinearLayout parent, String label, Runnable action, boolean mutates) {
         Button view = new Button(requireContext()); view.setText(label); view.setAllCaps(false); view.setOnClickListener(v -> action.run());
+        view.setTextSize(14); view.setMinHeight(dp(48));
         parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
         if (mutates) mutationControls.add(view);
         return view;
@@ -164,11 +184,7 @@ public final class ModpackManagerFragment extends Fragment {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1)); params.setMargins(0, dp(8), 0, dp(8)); content.addView(line, params);
     }
     private void instancePage() {
-        text("Installation et préférences", 19, true);
-        text("L’installation prépare le modpack, Minecraft et son loader sans démarrer le jeu. Les ressources partagées et les runtimes sont réutilisés.", 14, false);
-        button(content, "Réparer les fichiers du modpack", () -> new AlertDialog.Builder(requireContext()).setTitle("Réparer ce modpack ?")
-            .setMessage("Les fichiers gérés seront retéléchargés. Les réglages personnels protégés par .filesmetas sont conservés.")
-            .setNegativeButton("Annuler", null).setPositiveButton("Réparer", (d,w) -> operation("Réparation…", () -> repo.sync(slug, true))).show(), true);
+        text("Préférences de l’instance", 18, true);
         button(content, "Mémoire et arguments JVM", this::settingsDialog, true);
         button(content, "Canal de distribution", this::chooseChannel, true);
         button(content, "Version du modpack", this::choosePackVersion, true);
@@ -178,28 +194,61 @@ public final class ModpackManagerFragment extends Fragment {
         text("Supprime uniquement cette instance locale et ses préférences. Les mondes et les ajouts personnels de cette instance seront perdus.", 14, false);
         button(content, "Désinstaller ce modpack", this::confirmUninstall, true);
     }
+    private void confirmRepair() {
+        new AlertDialog.Builder(requireContext()).setTitle("Réparer ce modpack ?")
+            .setMessage("Restaurer les fichiers et les versions officiels du pack ? Les modifications de ses mods seront réinitialisées. Tes mondes, options et mods personnels seront conservés.")
+            .setNegativeButton("Annuler", null).setPositiveButton("Réparer", (dialog, which) -> operation("Réparation…", () -> Sn3GameBridge.repair(host(), repo, slug))).show();
+    }
     private void modsPage() {
-        text("Mods installés", 19, true);
-        text("Les mods fournis par le pack restent gérés par celui-ci. Tu peux gérer séparément tes ajouts personnels.", 14, false);
-        button(content, "Actualiser la liste", this::scanMods, false);
-        if (scanning) text("Lecture des fichiers…", 14, false);
-        else if (mods.isEmpty()) text("Aucun mod installé. Installe le pack ou ouvre Modrinth pour ajouter un mod compatible.", 14, false);
+        text(scanning ? "Lecture des mods…" : mods.size() + " mods installés", 18, true);
+        if (!scanning && mods.isEmpty()) text("Aucun mod installé. Ajoute un mod depuis Modrinth.", 14, false);
         for (LocalMod mod : mods) {
-            separator(); text(mod.info().name(), 17, true);
-            text((mod.info().version() == null ? "Version inconnue" : mod.info().version()) + (mod.info().author() == null ? "" : " · " + mod.info().author()), 14, false);
-            String filename = mod.file().getFileName().toString();
-            text(filename + " · " + (mod.managed() ? "Fourni par le modpack" : "Ajout personnel") + (filename.endsWith(".disabled") ? " · Désactivé" : ""), 13, false);
-            if (!mod.managed()) {
-                button(content, filename.endsWith(".disabled") ? "Activer" : "Désactiver", () -> changeMod(mod, false), true);
-                button(content, "Versions / mettre à jour", () -> {
-                    if (mod.project() != null) loadVersions(mod.project(), mod.info().name());
-                    else { query = mod.info().name(); versions = null; showPage(2); search(); }
-                }, true);
-                button(content, "Supprimer cet ajout", () -> new AlertDialog.Builder(requireContext()).setTitle("Supprimer ce mod personnel ?")
-                    .setMessage(filename + " sera supprimé de cette instance.").setNegativeButton("Annuler", null)
-                    .setPositiveButton("Supprimer", (d,w) -> changeMod(mod, true)).show(), true);
-            }
+            LinearLayout card = new LinearLayout(requireContext()); card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(10), dp(8), dp(10), dp(8));
+            android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+            background.setColor(getResources().getColor(R.color.background_bottom_bar)); background.setCornerRadius(dp(8)); card.setBackground(background);
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1,-2); cardParams.bottomMargin=dp(8); content.addView(card,cardParams);
+            LinearLayout heading = new LinearLayout(requireContext()); heading.setGravity(android.view.Gravity.CENTER_VERTICAL); card.addView(heading);
+            ImageView icon = new ImageView(requireContext()); icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if (mod.icon() == null) icon.setImageResource(R.drawable.ic_folder); else icon.setImageBitmap(mod.icon());
+            heading.addView(icon,new LinearLayout.LayoutParams(dp(44),dp(44)));
+            LinearLayout details = new LinearLayout(requireContext()); details.setOrientation(LinearLayout.VERTICAL); details.setPadding(dp(10),0,dp(6),0);
+            heading.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+            TextView name = new TextView(requireContext()); name.setText(mod.info().name()); name.setTextSize(15); name.setTextColor(getResources().getColor(R.color.primary_text)); name.setTypeface(name.getTypeface(),android.graphics.Typeface.BOLD); details.addView(name);
+            TextView metadata = new TextView(requireContext()); metadata.setText((mod.info().version()==null?"Version inconnue":mod.info().version())+(mod.managed()?" · Pack":" · Personnel")); metadata.setTextSize(12); details.addView(metadata);
+            String filename = mod.file().getFileName().toString(); boolean disabled = filename.endsWith(".disabled");
+            Switch enabled = new Switch(requireContext()); enabled.setChecked(!disabled); enabled.setContentDescription((disabled?"Activer ":"Désactiver ")+mod.info().name());
+            heading.addView(enabled); mutationControls.add(enabled);
+            enabled.setOnClickListener(control -> { enabled.setChecked(!disabled); changeMod(mod,false); });
+            LinearLayout actions = new LinearLayout(requireContext()); card.addView(actions);
+            Button version = button(actions,"Versions",()-> {
+                replacedFile=mod.file();
+                if(mod.project()!=null) loadVersions(mod.project(),mod.info().name());
+                else { query=mod.info().name(); versions=null; showPage(2); search(); }
+            },true);
+            version.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));
+            Button remove = button(actions,"Supprimer",()->new AlertDialog.Builder(requireContext()).setTitle("Supprimer ce mod ?")
+                .setMessage("Retirer « "+mod.info().name()+" » de cette instance ?"+(mod.managed()?" Réparer permettra de restaurer la version du pack.":""))
+                .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(dialog,which)->changeMod(mod,true)).show(),true);
+            remove.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));
         }
+    }
+    private android.graphics.Bitmap readIcon(Path file, String path) {
+        if (path == null) return null;
+        try (java.util.zip.ZipFile archive = new java.util.zip.ZipFile(file.toFile())) {
+            var entry = archive.getEntry(path); if (entry == null || entry.getSize() > 2*1024*1024) return null;
+            byte[] bytes;
+            try (var input = archive.getInputStream(entry); var output = new java.io.ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192]; int count;
+                while((count=input.read(buffer))!=-1) { if(output.size()+count>2*1024*1024)return null; output.write(buffer,0,count); }
+                bytes=output.toByteArray();
+            }
+            var options = new android.graphics.BitmapFactory.Options(); options.inJustDecodeBounds=true;
+            android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+            if(options.outWidth<=0 || options.outHeight<=0 || options.outWidth>4096 || options.outHeight>4096)return null;
+            options.inSampleSize=1; while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>128)options.inSampleSize*=2;
+            options.inJustDecodeBounds=false; return android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+        } catch(Exception ignored) { return null; }
     }
     private void scanMods() {
         if (!ready() || scanning) return;
@@ -219,7 +268,8 @@ public final class ModpackManagerFragment extends Fragment {
                         String base = name.endsWith(".disabled") ? name.substring(0, name.length()-9) : name;
                         String project = null;
                         for (var pref : preferences.entrySet()) if (pref.getKey().startsWith("mod."+slug+".") && base.equals(pref.getValue())) project = pref.getKey().substring(("mod."+slug+".").length());
-                        loaded.add(new LocalMod(file, ModMetadataReader.read(file), managed.contains("mods/"+base), project));
+                        InstalledModInfo info = ModMetadataReader.read(file);
+                        loaded.add(new LocalMod(file, info, managed.contains("mods/"+base), project, readIcon(file,info.iconPath())));
                     }
                 }
                 onMain(() -> { if (generation == scanGeneration) { scanning = false; mods = List.copyOf(loaded); if (page == 1) renderPage(); } });
@@ -229,31 +279,19 @@ public final class ModpackManagerFragment extends Fragment {
         });
     }
     private void changeMod(LocalMod mod, boolean remove) {
-        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> {
-            Path directory = repo.instance(slug).resolve("mods").toAbsolutePath().normalize();
-            Path file = mod.file().toAbsolutePath().normalize();
-            if (!directory.equals(file.getParent()) || Files.isSymbolicLink(directory)) throw new IOException("Chemin de mod non sûr");
-            String name = file.getFileName().toString(); String base = name.endsWith(".disabled") ? name.substring(0,name.length()-9) : name;
-            for (ManifestFile managed : repo.manifest(slug).files()) if (managed.path().equals("mods/"+base)) throw new IOException("Ce fichier est fourni par le modpack et ne peut pas être modifié ici.");
-            if (remove) {
-                Files.deleteIfExists(file);
-                var edit = repo.prefs.edit();
-                for (var pref : repo.prefs.getAll().entrySet()) if (pref.getKey().startsWith("mod."+slug+".") && base.equals(pref.getValue())) edit.remove(pref.getKey());
-                edit.apply();
-            } else Files.move(file, file.resolveSibling(name.endsWith(".disabled") ? base : name+".disabled"));
-        });
+        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> repo.changeMod(slug, mod.file(), remove));
     }
     private void searchPage() {
         text("Ajouter ou mettre à jour un mod", 19, true);
         EditText input = new EditText(requireContext()); input.setSingleLine(true); input.setHint("Rechercher sur Modrinth"); input.setText(query); content.addView(input);
-        button(content, "Rechercher", () -> { query = input.getText().toString().trim(); versions = null; search(); }, true);
+        button(content, "Rechercher", () -> { query = input.getText().toString().trim(); versions = null; replacedFile = null; search(); }, true);
         if (versions != null) {
             button(content, "Retour aux résultats", () -> { versions = null; renderPage(); }, false);
             text("Versions compatibles · " + versionTitle, 17, true);
             for (ModrinthVersion version : versions) {
                 separator(); text(version.name(), 16, true); text(version.versionNumber() + " · " + version.versionType(), 14, false);
                 text("Les dépendances obligatoires compatibles seront installées avec cette version.", 13, false);
-                button(content, "Installer cette version", () -> operation("Installation de " + versionTitle + "…", () -> new SnakeMods(repo).install(slug, versionManifest, version)), true);
+                button(content, "Installer cette version", () -> operation("Installation de " + versionTitle + "…", () -> new SnakeMods(repo).install(slug, versionManifest, version, replacedFile)), true);
             }
         } else if (hits.isEmpty()) text("Lance une recherche pour afficher les mods et leurs versions compatibles avec ce pack.", 14, false);
         else for (ModrinthSearchHit hit : hits) {
@@ -269,7 +307,7 @@ public final class ModpackManagerFragment extends Fragment {
     private void search() {
         operation("Recherche Modrinth…", () -> {
             List<ModrinthSearchHit> result = new ModrinthApiClient(repo.http).search(query, 20);
-            onMain(() -> { hits = result; versions = null; page = 2; renderPage(); });
+            onMain(() -> { hits = result; versions = null; showPage(2); });
         });
     }
     private void loadVersions(String project, String title) {
@@ -278,7 +316,7 @@ public final class ModpackManagerFragment extends Fragment {
             List<ModrinthVersion> compatible = new ModrinthApiClient(repo.http).versions(project).stream()
                     .filter(version -> version.isCompatible(manifest.mcVersion(),manifest.loader())).toList();
             if (compatible.isEmpty()) throw new IOException("Aucune version compatible avec ce modpack.");
-            onMain(() -> { versionManifest = manifest; versionTitle = title; versions = compatible; page = 2; renderPage(); });
+            onMain(() -> { versionManifest = manifest; versionTitle = title; versions = compatible; showPage(2); });
         });
     }
     private void settingsDialog() {

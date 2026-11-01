@@ -180,6 +180,7 @@ final class SnakeRepository {
         // survives until the last traversal step. Retrying Installer then repairs it.
         beginInstallation(slug);
         InstanceUninstaller.delete(dirs.instances(), slug);
+        InstanceUninstaller.delete(dirs.root().resolve("mod-overrides"), slug);
         Path settings = dirs.modpackSettingsFile(slug);
         if (Files.isSymbolicLink(settings.getParent())) throw new java.io.IOException("Dossier de réglages non sûr : lien symbolique.");
         Files.deleteIfExists(settings);
@@ -201,6 +202,28 @@ final class SnakeRepository {
         if (!edit.commit()) throw new java.io.IOException("Les préférences du modpack n’ont pas pu être nettoyées.");
     }
 
+    ModOverrides modOverrides(String slug) throws java.io.IOException {
+        requireSlug(slug); return new ModOverrides(dirs.root().resolve("mod-overrides").resolve(slug));
+    }
+    Map<String, ModOverrides.Choice> modChoices(String slug) throws java.io.IOException { return modOverrides(slug).choices(); }
+    void changeMod(String slug, Path file, boolean remove) throws Exception {
+        requireSlug(slug);
+        if (Sn3GameBridge.isRunning(context)) throw new IllegalStateException("Ferme Minecraft avant de modifier les mods.");
+        if (busy && Thread.currentThread() != worker) throw new IllegalStateException("Une opération est déjà en cours.");
+        Path directory = instance(slug).resolve("mods").toAbsolutePath().normalize();
+        Path target = file.toAbsolutePath().normalize();
+        if (!directory.equals(target.getParent())) throw new java.io.IOException("Le mod n’appartient pas à cette instance.");
+        String name = target.getFileName().toString(); String base = ModOverrides.canonicalFilename(name);
+        ModpackManifest manifest = manifest(slug);
+        boolean managed = manifest.files().stream().anyMatch(item -> item.path().equals("mods/"+base));
+        modOverrides(slug).change(instance(slug),name,remove,managed);
+        if (remove) {
+            var edit = prefs.edit();
+            for (var pref : prefs.getAll().entrySet()) if (pref.getKey().startsWith("mod."+slug+".") && base.equals(pref.getValue())) edit.remove(pref.getKey());
+            edit.apply();
+        }
+    }
+
     ModpackSettings settings(String slug) { return new ModpackSettingsStore(dirs).load(slug, ModpackSettings.defaults()); }
     ModpackManifest manifest(String slug) throws Exception {
         requireSlug(slug); ModpackSettings s = settings(slug);
@@ -214,7 +237,10 @@ final class SnakeRepository {
         if (!Files.exists(dirs.modpackSettingsFile(slug))) settings.save(slug, ModpackSettings.defaults(m.defaultMemoryMb(), m.defaultJvmArgs()));
         if (pinKey != null) SensitiveFileVault.decryptAll(dir, pinKey);
         try {
-            if (repair) new LocalManifestStore().clear(dir);
+            if (repair) {
+                modOverrides(slug).resetManaged(dir);
+                new LocalManifestStore().clear(dir);
+            }
             new ModpackSyncEngine(new ModpackFileDownloader(api(), http), new LocalManifestStore())
                     .sync(slug, dir, m, requireSession(), new SyncProgressListener() {
                         private volatile int percent;
@@ -232,7 +258,10 @@ final class SnakeRepository {
                         }
                         public void onFileDone(String path) { }
                         public void onDeleted(String path) { }
-                    });
+                    }, false, modOverrides(slug).ignoredModPaths());
+            // The server manifest stays intact/signed. Reapply explicit local mod choices
+            // only after its verified sync, and before any game/blacklist check.
+            modOverrides(slug).apply(dir);
             mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", 100,
                     mc.snakenest.launcher.android.R.string.sn3_apply_done);
         } finally { if (pinKey != null) SensitiveFileVault.encryptAll(dir, pinKey); }
