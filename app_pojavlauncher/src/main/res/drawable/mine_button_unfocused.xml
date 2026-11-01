@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resource-native Minecraft bevel, driven by the same accent as the rest of the theme. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="@color/minebutton_shadow" /></shape></item>
+    <item android:bottom="3dp" android:right="3dp"><shape><solid android:color="@color/minebutton_highlight" /></shape></item>
+    <item android:top="3dp" android:left="3dp" android:bottom="3dp" android:right="3dp">
+        <shape><solid android:color="@color/minebutton_color" /><padding android:left="4dp" android:right="4dp" android:top="4dp" android:bottom="4dp" /></shape>
+    </item>
+</layer-list>

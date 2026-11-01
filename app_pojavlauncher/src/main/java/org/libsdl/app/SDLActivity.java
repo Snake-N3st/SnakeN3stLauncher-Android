@@ -57,8 +57,8 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import net.kdt.pojavlaunch.MainActivity;
-import net.kdt.pojavlaunch.MinecraftGLSurface;
+import mc.snakenest.launcher.android.MainActivity;
+import mc.snakenest.launcher.android.MinecraftGLSurface;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;

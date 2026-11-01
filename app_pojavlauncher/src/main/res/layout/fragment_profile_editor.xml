@@ -34,6 +34,7 @@
                 tools:src="@tools:sample/avatars" />
 
             <ImageView
+                android:id="@+id/sn3_profile_icon_edit_badge"
                 android:layout_width="@dimen/_14sdp"
                 android:layout_height="@dimen/_14sdp"
                 android:src="@drawable/ic_edit_profile"

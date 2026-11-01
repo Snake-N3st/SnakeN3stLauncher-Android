@@ -33,9 +33,9 @@ import android.view.WindowManager;
 
 import android.view.ScaleGestureDetector;
 
-import net.kdt.pojavlaunch.MinecraftGLSurface;
-import net.kdt.pojavlaunch.Tools;
-import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import mc.snakenest.launcher.android.MinecraftGLSurface;
+import mc.snakenest.launcher.android.Tools;
+import mc.snakenest.launcher.android.prefs.LauncherPreferences;
 
 /**
     SDLSurface. This is what we draw on, so we need to know when it's created

@@ -1,0 +1,87 @@
+name: Snake N3st Android release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SN3_CLIENT_ID: ${{ vars.SN3_CLIENT_ID }}
+      SN3_BASE_URL: ${{ vars.SN3_BASE_URL || 'https://snake-n3st.fr' }}
+      SN3_ROOT_KEYS: ${{ vars.SN3_MODPACK_ROOT_KEYS }}
+      SN3_VERSION_CODE: ${{ vars.SN3_VERSION_CODE }}
+      SN3_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.SN3_RELEASE_KEYSTORE_PASSWORD }}
+      SN3_RELEASE_KEY_ALIAS: ${{ secrets.SN3_RELEASE_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Require production signing and an Android client
+        env:
+          SN3_RELEASE_KEYSTORE_BASE64: ${{ secrets.SN3_RELEASE_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$SN3_RELEASE_KEYSTORE_BASE64" || -z "$SN3_RELEASE_KEYSTORE_PASSWORD" || -z "$SN3_RELEASE_KEY_ALIAS" ]]; then
+            echo '::error::Configure SN3_RELEASE_KEYSTORE_BASE64, SN3_RELEASE_KEYSTORE_PASSWORD and SN3_RELEASE_KEY_ALIAS before publishing an Android release.'
+            exit 1
+          fi
+          if [[ -z "$SN3_CLIENT_ID" ]]; then
+            echo '::error::Configure the repository variable SN3_CLIENT_ID before publishing an Android release.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$SN3_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sn3-release.jks"
+          printf 'SN3_RELEASE_KEYSTORE_PATH=%s\n' "$RUNNER_TEMP/sn3-release.jks" >> "$GITHUB_ENV"
+          printf 'SN3_BUILD_VERSION_NAME=%s\n' "${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          printf 'SN3_BUILD_VERSION_CODE=%s\n' "${SN3_VERSION_CODE:-$((10000000 + GITHUB_RUN_NUMBER))}" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare bundled Amethyst Java 21
+        run: ./scripts/prepare-jre21.sh
+      - name: Generate language list
+        run: bash scripts/languagelist_updater.sh
+      - name: Build signed debug and production APKs at lowest priority
+        shell: bash
+        run: |
+          ./scripts/build-sn3.sh :app_pojavlauncher:assembleDebug :app_pojavlauncher:assembleRelease \
+            "-Psn3.clientId=$SN3_CLIENT_ID" \
+            "-Psn3.baseUrl=$SN3_BASE_URL" \
+            "-Psn3.modpackRootKeys=$SN3_ROOT_KEYS" \
+            "-Psn3.versionCode=$SN3_BUILD_VERSION_CODE" \
+            "-Psn3.versionName=$SN3_BUILD_VERSION_NAME"
+      - name: Prepare APK assets and metadata from actual APK manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk out/SnakeN3stLauncher-Android-debug.apk
+          cp app_pojavlauncher/build/outputs/apk/release/app_pojavlauncher-release.apk out/SnakeN3stLauncher-Android.apk
+          python3 scripts/generate-android-update.py --tag "$GITHUB_REF_NAME" --output out/android-update.json out/*.apk
+      - name: Publish APKs before the update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "Snake N3st Android $SN3_BUILD_VERSION_NAME"
+          fi
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" out/*.apk --clobber
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" out/android-update.json --clobber
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/sn3-release.jks"

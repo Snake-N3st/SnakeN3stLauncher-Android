@@ -2,6 +2,9 @@
 <resources>
     <!-- Light or not? -->
     <style name="AppTheme" parent="@style/Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/minebutton_color</item>
+        <item name="colorPrimaryDark">@color/background_status_bar</item>
+        <item name="colorAccent">@color/minebutton_color</item>
         <item name="windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
         <item name="android:windowContentOverlay">@null</item>

@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name='Amethyst'
+rootProject.name='SnakeN3stLauncher-Android'
 include ':jre_lwjgl3glfw'
 include ":jre_lwjgl3glfw:lwjgl-3.3.3"
 include ":jre_lwjgl3glfw:lwjgl-3.4.1"
@@ -24,3 +24,5 @@ include ':arc_dns_injector'
 include ':MioLibPatcher'
 include ':forge_installer'
 include ':androidnsbypass'
+
+include ':sn3-core'

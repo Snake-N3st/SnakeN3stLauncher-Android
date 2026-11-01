@@ -539,7 +539,7 @@ static bool tryCriticalNative(JNIEnv *env) {
     static const JNINativeMethod testJNIMethod[] = {
             { "testCriticalNative", "(II)V", dvm_testCriticalNative}
     };
-    jclass criticalNativeTest = (*env)->FindClass(env, "net/kdt/pojavlaunch/CriticalNativeTest");
+    jclass criticalNativeTest = (*env)->FindClass(env, "mc/snakenest/launcher/android/CriticalNativeTest");
     if(criticalNativeTest == NULL) {
         LOGD("No CriticalNativeTest class found !");
         (*env)->ExceptionClear(env);
@@ -592,7 +592,7 @@ static inline void initSubsystem(void) {
     SDL_Init(SDL_INIT_GAMEPAD | SDL_INIT_JOYSTICK | SDL_INIT_EVENTS);
 }
 JNIEXPORT void JNICALL
-Java_net_kdt_pojavlaunch_Tools_00024SDL_initializeControllerSubsystems(JNIEnv *env, jclass clazz){
+Java_mc_snakenest_launcher_android_Tools_00024SDL_initializeControllerSubsystems(JNIEnv *env, jclass clazz){
     // Please ensure that you have already dlopen'ed SDL3 before calling this.
     initSubsystem();
 }

@@ -15,21 +15,21 @@
 		android:layout_width="match_parent"
 		android:layout_height="match_parent">
 
-		<net.kdt.pojavlaunch.customcontrols.ControlLayout
+		<mc.snakenest.launcher.android.customcontrols.ControlLayout
 			android:id="@+id/main_control_layout"
 			android:layout_width="match_parent"
 			android:layout_height="match_parent">
 
 			<View style="@style/DimensionTracker"/>
 
-			<net.kdt.pojavlaunch.MinecraftGLSurface
+			<mc.snakenest.launcher.android.MinecraftGLSurface
 				android:id="@+id/main_game_render_view"
 				android:layout_width="fill_parent"
 				android:layout_height="fill_parent"
 				android:defaultFocusHighlightEnabled="false"
                 tools:ignore="UnusedAttribute" />
 
-			<net.kdt.pojavlaunch.customcontrols.mouse.Touchpad
+			<mc.snakenest.launcher.android.customcontrols.mouse.Touchpad
 				android:layout_height="match_parent"
 				android:layout_width="match_parent"
 				android:orientation="vertical"
@@ -51,7 +51,7 @@
 				android:importantForAccessibility="no"
 				android:background="@android:color/transparent"/>
 
-			<net.kdt.pojavlaunch.customcontrols.keyboard.TouchCharInput
+			<mc.snakenest.launcher.android.customcontrols.keyboard.TouchCharInput
 				android:id="@+id/mainTouchCharInput"
 				android:layout_width="1dp"
 				android:layout_height="1dp"
@@ -62,25 +62,25 @@
 				android:inputType="textFilter|textImeMultiLine|textAutoComplete|textAutoCorrect"
 				tools:ignore="TouchTargetSizeCheck" />
 
-			<net.kdt.pojavlaunch.utils.TouchControllerInputView
+			<mc.snakenest.launcher.android.utils.TouchControllerInputView
 				android:id="@+id/touch_controller_input"
 				android:layout_width="1dp"
 				android:layout_height="1dp"
 				android:layout_gravity="bottom" />
 
-			<net.kdt.pojavlaunch.customcontrols.handleview.DrawerPullButton
+			<mc.snakenest.launcher.android.customcontrols.handleview.DrawerPullButton
 				android:id="@+id/drawer_button"
 				android:layout_width="40dp"
 				android:layout_height="20dp"
 				android:padding="8dp"
 				android:elevation="10dp"
 				android:layout_gravity="center_horizontal"/>
-			<net.kdt.pojavlaunch.customcontrols.mouse.HotbarView
+			<mc.snakenest.launcher.android.customcontrols.mouse.HotbarView
 				android:id="@+id/hotbar_view"
 				android:layout_width="0px"
 				android:layout_height="0px"/>
 
-		</net.kdt.pojavlaunch.customcontrols.ControlLayout>
+		</mc.snakenest.launcher.android.customcontrols.ControlLayout>
 
 		<com.kdt.LoggerView
 			android:id="@+id/mainLoggerView"
