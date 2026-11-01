@@ -25,10 +25,21 @@ public final class ModpackFileDownloader {
 
     private final ModpackApiClient api;
     private final HttpJsonClient http;
+    private final Path blobCache;
 
     public ModpackFileDownloader(ModpackApiClient api, HttpJsonClient http) {
-        this.api = api;
-        this.http = http;
+        this(api, http, null);
+    }
+
+    private ModpackFileDownloader(ModpackApiClient api, HttpJsonClient http, Path blobCache) {
+        this.api = api; this.http = http; this.blobCache = blobCache;
+    }
+
+    ModpackFileDownloader withBlobCache(Path cache) { return new ModpackFileDownloader(api, http, cache); }
+
+    void prefetch(String slug, java.util.List<ManifestFile> files, PlayerSession session)
+            throws IOException, InterruptedException {
+        new ModpackBatchDownloader(api).fetch(slug, files, session, blobCache);
     }
 
     public void download(String slug, ManifestFile file, Path instanceDir, PlayerSession session)
@@ -85,6 +96,11 @@ public final class ModpackFileDownloader {
     private RawResponse fetch(String slug, ManifestFile file, PlayerSession session) throws IOException, InterruptedException {
         if (file.url() != null) {
             return http.getRaw(URI.create(file.url()));
+        }
+        if (blobCache != null) {
+            Path cached = blobCache.resolve(file.hash().toLowerCase(java.util.Locale.ROOT));
+            if (!java.nio.file.Files.isRegularFile(cached)) throw new IOException("Missing verified batch blob");
+            return new RawResponse(200, java.nio.file.Files.newInputStream(cached));
         }
         return api.downloadBlob(slug, file.hash(), session);
     }

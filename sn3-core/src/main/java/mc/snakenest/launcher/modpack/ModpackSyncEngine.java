@@ -60,22 +60,33 @@ public final class ModpackSyncEngine {
         SyncPlan plan = ManifestDiffer.diff(previous, targetManifest, metas,
                 path -> existsInInstance(instanceDir, path), resetPlayerFiles);
 
-        downloadAllInParallel(slug, instanceDir, plan.toDownload(), session, listener);
+        Path batchCache = Files.createTempDirectory(instanceDir.toAbsolutePath().getParent(), ".sn3-batch-");
+        try {
+            ModpackFileDownloader activeDownloader = downloader.withBlobCache(batchCache);
+            List<ManifestFile> requested = new ArrayList<>(plan.toDownload());
+            for (MergeAction action : plan.toMerge()) requested.add(action.file());
+            activeDownloader.prefetch(slug, requested, session);
+            downloadAllInParallel(slug, instanceDir, plan.toDownload(), session, listener, activeDownloader);
 
-        // Sequential, unlike the downloads: each one reads the player's existing file, merges and
-        // rewrites it, and there are only ever a handful of them.
-        for (MergeAction action : plan.toMerge()) {
-            listener.onFileStarted(action.file().path(), action.file().size());
-            mergeOne(slug, instanceDir, action, session);
-            listener.onFileDone(action.file().path());
+            // Sequential, unlike the downloads: each one reads the player's existing file, merges and
+            // rewrites it, and there are only ever a handful of them.
+            for (MergeAction action : plan.toMerge()) {
+                listener.onFileStarted(action.file().path(), action.file().size());
+                mergeOne(slug, instanceDir, action, session, activeDownloader);
+                listener.onFileDone(action.file().path());
+            }
+
+            for (String path : plan.toDelete()) {
+                deleteAndPruneEmptyParents(instanceDir, path);
+                listener.onDeleted(path);
+            }
+
+            manifestStore.save(instanceDir, StoredManifest.of(targetManifest));
+        } finally {
+            try (var files = Files.walk(batchCache)) {
+                for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(file);
+            }
         }
-
-        for (String path : plan.toDelete()) {
-            deleteAndPruneEmptyParents(instanceDir, path);
-            listener.onDeleted(path);
-        }
-
-        manifestStore.save(instanceDir, StoredManifest.of(targetManifest));
     }
 
     /**
@@ -121,16 +132,16 @@ public final class ModpackSyncEngine {
     }
 
     /** Fetches the pack's version into memory and folds it into whatever the player already has. */
-    private void mergeOne(String slug, Path instanceDir, MergeAction action, PlayerSession session)
+    private void mergeOne(String slug, Path instanceDir, MergeAction action, PlayerSession session, ModpackFileDownloader activeDownloader)
             throws IOException, InterruptedException, ModpackApiException {
         Path target = InstancePaths.resolveSafely(instanceDir, action.file().path());
         byte[] existing = Files.isRegularFile(target) ? Files.readAllBytes(target) : null;
-        byte[] incoming = downloader.fetchBytes(slug, action.file(), session);
+        byte[] incoming = activeDownloader.fetchBytes(slug, action.file(), session);
 
         AtomicFiles.write(target, FileMerger.merge(action.format(), existing, incoming));
     }
 
-    private void downloadAllInParallel(String slug, Path instanceDir, List<ManifestFile> files, PlayerSession session, SyncProgressListener listener)
+    private void downloadAllInParallel(String slug, Path instanceDir, List<ManifestFile> files, PlayerSession session, SyncProgressListener listener, ModpackFileDownloader activeDownloader)
             throws IOException, InterruptedException, ModpackApiException {
         if (files.isEmpty()) {
             return;
@@ -147,7 +158,7 @@ public final class ModpackSyncEngine {
             for (ManifestFile file : files) {
                 Callable<Void> task = () -> {
                     listener.onFileStarted(file.path(), file.size());
-                    downloader.download(slug, file, instanceDir, session);
+                    activeDownloader.download(slug, file, instanceDir, session);
                     listener.onFileDone(file.path());
                     return null;
                 };

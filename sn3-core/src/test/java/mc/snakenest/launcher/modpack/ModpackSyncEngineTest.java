@@ -65,8 +65,9 @@ class ModpackSyncEngineTest {
     @Test
     void freshSyncDownloadsEveryFileAndRecordsTheManifest(@TempDir Path instanceDir) throws Exception {
         String content = "mod-a-content";
-        when(api.downloadBlob("aventure", Sha256.hex(content.getBytes(StandardCharsets.UTF_8)), session))
-                .thenReturn(rawResponseOf(content));
+        String hash = Sha256.hex(content.getBytes(StandardCharsets.UTF_8));
+        when(api.downloadBlobs("aventure", List.of(hash), session))
+                .thenReturn(rawResponseOf("SN3B1\n" + hash + " " + content.length() + "\n" + content));
 
         ModpackManifest manifest = new ModpackManifest("1.0.0", null, null, content.length(), "1.20.4", "forge", "49.0.30",
                 List.of(new ManifestFile("mods/a.jar", Sha256.hex(content.getBytes(StandardCharsets.UTF_8)), content.length(), null)),

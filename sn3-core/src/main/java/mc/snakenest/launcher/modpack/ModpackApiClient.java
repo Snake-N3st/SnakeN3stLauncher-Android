@@ -106,6 +106,22 @@ public final class ModpackApiClient {
         return http.getRaw(uri);
     }
 
+    private long lastBatchSecond = -1;
+
+    /** Streams up to 64 blobs; the caller validates framing and closes the response. */
+    public synchronized RawResponse downloadBlobs(String slug, List<String> hashes, PlayerSession session)
+            throws IOException, InterruptedException {
+        // The protocol signs whole seconds and rejects signature replays. Two small batches must
+        // not produce the same signature for this endpoint within one second.
+        while (System.currentTimeMillis() / 1000 <= lastBatchSecond) Thread.sleep(25);
+        String path = "/api/modpacks/" + slug + "/blobs";
+        SignedParams signed = SignedRequestSigner.sign(session, "GET", path);
+        lastBatchSecond = signed.timestamp();
+        Map<String, String> params = signed.toQueryParams();
+        params.put("hashes", String.join(",", hashes));
+        return http.getRaw(Uris.withQuery(baseUrl.resolve(path), params));
+    }
+
     private JsonResponse get(String path, Map<String, String> extraParams, PlayerSession session)
             throws IOException, InterruptedException {
         SignedParams signed = SignedRequestSigner.sign(session, "GET", path);
