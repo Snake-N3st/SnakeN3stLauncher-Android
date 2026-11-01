@@ -132,8 +132,14 @@ public class LauncherPreferences {
             }
         }
         String configuredRuntime = DEFAULT_PREF.getString("defaultRuntime", "");
+        if (!DEFAULT_PREF.getBoolean("sn3.bundled21-default-migrated", false)) {
+            // The old bundled default survives APK updates as "Internal". Migrate it once;
+            // later explicit selections and per-profile Java choices remain untouched.
+            if ("Internal".equals(configuredRuntime)) configuredRuntime = mc.snakenest.launcher.android.NewJREUtil.BUNDLED_RUNTIME_NAME;
+            DEFAULT_PREF.edit().putBoolean("sn3.bundled21-default-migrated", true)
+                    .putString("defaultRuntime", configuredRuntime == null ? "" : configuredRuntime).apply();
+        }
         if (configuredRuntime != null && !configuredRuntime.isEmpty()) {
-            // Preserve explicit user choices, including existing Java 8 installations.
             PREF_DEFAULT_RUNTIME = configuredRuntime;
         } else {
             PREF_DEFAULT_RUNTIME = mc.snakenest.launcher.android.NewJREUtil.BUNDLED_RUNTIME_NAME;

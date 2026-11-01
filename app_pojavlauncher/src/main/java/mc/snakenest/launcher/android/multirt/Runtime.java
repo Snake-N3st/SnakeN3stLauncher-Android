@@ -22,6 +22,13 @@ public class Runtime {
     
 
 
+    public String displayName(android.content.Context context) {
+        if ("Internal".equals(name)) return context.getString(mc.snakenest.launcher.android.R.string.sn3_legacy_runtime);
+        if (mc.snakenest.launcher.android.NewJREUtil.BUNDLED_RUNTIME_NAME.equals(name))
+            return context.getString(mc.snakenest.launcher.android.R.string.sn3_bundled_runtime);
+        return name.replace(".tar.xz", "");
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
