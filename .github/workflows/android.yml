@@ -27,15 +27,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Get public Amethyst Java 8 runtime
-        uses: dawidd6/action-download-artifact@v9
-        with:
-          workflow: build.yml
-          path: app_pojavlauncher/src/main/assets/components/jre
-          workflow_conclusion: completed
-          repo: AngelAuraMC/angelauramc-openjdk-build
-          branch: buildjre8
-          name: jre8-pojav
+      - name: Prepare bundled Amethyst Java 21 only
+        run: ./scripts/prepare-jre21.sh
       - name: Generate language list
         run: bash scripts/languagelist_updater.sh
       - name: Build debug APK at lowest priority

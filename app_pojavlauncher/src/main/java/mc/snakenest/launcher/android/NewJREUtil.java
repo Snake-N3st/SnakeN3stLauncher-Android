@@ -27,7 +27,14 @@ import java.util.Arrays;
 import java.util.List;
 
 public class NewJREUtil {
-    private static boolean checkInternalRuntime(AssetManager assetManager, InternalRuntime internalRuntime) {
+    public static final String BUNDLED_RUNTIME_NAME = "Internal-21";
+
+    /** Installs Java 21 separately; an existing Java 8 runtime named Internal is never replaced. */
+    public static boolean ensureBundledRuntime(AssetManager assets) {
+        return checkInternalRuntime(assets, InternalRuntime.JRE_21);
+    }
+
+    private static synchronized boolean checkInternalRuntime(AssetManager assetManager, InternalRuntime internalRuntime) {
         String launcher_runtime_version;
         String installed_runtime_version = MultiRTUtils.readInternalRuntimeVersion(internalRuntime.name);
         try {
@@ -78,6 +85,11 @@ public class NewJREUtil {
 
     /** @return true if everything is good, false otherwise.  */
     public static boolean installNewJreIfNeeded(Activity activity, JMinecraftVersionList.Version versionInfo) {
+        if (!ensureBundledRuntime(activity.getAssets())) {
+            Tools.dialogOnUiThread(activity, activity.getString(R.string.global_error),
+                    activity.getString(R.string.multirt_nocompatiblert, 21));
+            return false;
+        }
         //Now we have the reliable information to check if our runtime settings are good enough
         if (versionInfo.javaVersion == null || versionInfo.javaVersion.component.equalsIgnoreCase("jre-legacy"))
             return true;
@@ -110,9 +122,14 @@ public class NewJREUtil {
                 nearestInternalRuntime, nearestInstalledRuntime, (value)->value.rank
         );
 
+        if (selectedRankedRuntime == null && isJavaVersionAvailableForDownload(gameRequiredVersion)) {
+            tryDownloadRuntime(activity, gameRequiredVersion);
+            selectedRankedRuntime = getNearestInstalledRuntime(gameRequiredVersion);
+        }
+
         // Check if the selected runtime actually exists in the APK, else download it
         // If it isn't InternalRuntime then it wasn't in the apk in the first place!
-        if (selectedRankedRuntime.value instanceof InternalRuntime)
+        if (selectedRankedRuntime != null && selectedRankedRuntime.value instanceof InternalRuntime)
             if (!checkInternalRuntime(assetManager, (InternalRuntime) selectedRankedRuntime.value)) {
                 if (nearestInstalledRuntime == null) // If this was non-null then it would be a valid runtime and we can leave it be
                     tryDownloadRuntime(activity, gameRequiredVersion);
@@ -183,7 +200,7 @@ public class NewJREUtil {
         String arch = archAsString(getDeviceArchitecture());
         // Checks for using this method
         if (!isJavaVersionAvailableForDownload(javaVersion)) throw new RuntimeException("This is not an available JRE version");
-        if ((getDeviceArchitecture() == Architecture.ARCH_X86 && javaVersion >= 21)) throw new RuntimeException("x86 is not supported on Java"+javaVersion);
+        if ((getDeviceArchitecture() == Architecture.ARCH_X86 && javaVersion >= 25)) throw new RuntimeException("x86 is not supported on Java"+javaVersion);
         try {
             File outputFile = new File(Tools.DIR_CACHE, String.format("jre%s-android-%s.tar.xz", javaVersion, arch));
             DownloaderProgressWrapper monitor = new DownloaderProgressWrapper(R.string.newdl_downloading_jre_runtime,
@@ -205,9 +222,7 @@ public class NewJREUtil {
     }
 
     private enum InternalRuntime {
-        JRE_17(17, "Internal-17", "components/jre-new"),
-        JRE_21(21, "Internal-21", "components/jre-21"),
-        JRE_25(25, "Internal-25", "components/jre-25");
+        JRE_21(21, BUNDLED_RUNTIME_NAME, "components/jre-21");
         public final int majorVersion;
         public final String name;
         public final String path;

@@ -126,7 +126,13 @@ public class LauncherActivity extends BaseActivity {
                 }
             });
 
-    private mcAccountSpinner mAccountSpinner;
+    private Runnable snakeAccountAction;
+    private Runnable snakeLaunchAction;
+
+    public void bindSnakeActions(Runnable account, Runnable launch) {
+        snakeAccountAction = account;
+        snakeLaunchAction = launch;
+    }
     private FragmentContainerView mFragmentView;
     private ImageButton mSettingsButton;
     private ProgressLayout mProgressLayout;
@@ -149,13 +155,10 @@ public class LauncherActivity extends BaseActivity {
         return false;
     };
 
-    /* Listener for the auth method selection screen */
+    /* All authentication entry points belong to the Snake N3st device flow. */
     private final ExtraListener<Boolean> mSelectAuthMethod = (key, value) -> {
-        Fragment fragment = getSupportFragmentManager().findFragmentById(mFragmentView.getId());
-        // Allow starting the add account only from the main menu, should it be moved to fragment itself ?
-        if(!(fragment instanceof MainMenuFragment)) return false;
-
-        Tools.swapFragment(this, SelectAuthFragment.class, SelectAuthFragment.TAG, null);
+        if (snakeAccountAction != null) snakeAccountAction.run();
+        else Tools.backToMainMenu(this);
         return false;
     };
 
@@ -171,93 +174,7 @@ public class LauncherActivity extends BaseActivity {
     };
 
     private final ExtraListener<Boolean> mLaunchGameListener = (key, value) -> {
-        if(ProgressLayout.hasProcesses()){
-            Toast.makeText(this, R.string.tasks_ongoing, Toast.LENGTH_LONG).show();
-            return false;
-        }
-
-        String selectedProfile = LauncherPreferences.DEFAULT_PREF.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE,"");
-        if (LauncherProfiles.mainProfileJson == null || !LauncherProfiles.mainProfileJson.profiles.containsKey(selectedProfile)){
-            Toast.makeText(this, R.string.error_no_version, Toast.LENGTH_LONG).show();
-            return false;
-        }
-        MinecraftProfile prof = LauncherProfiles.mainProfileJson.profiles.get(selectedProfile);
-        if (prof == null || prof.lastVersionId == null || "Unknown".equals(prof.lastVersionId)){
-            Toast.makeText(this, R.string.error_no_version, Toast.LENGTH_LONG).show();
-            return false;
-        }
-
-        if(mAccountSpinner.getSelectedAccount() == null){
-            Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
-            ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
-            return false;
-        }
-
-        // Override whatever version is in use and replace it with lwjgl3ify if needed
-        List<File> lwjgl3ifyJars = getMods("lwjgl3ify-3");
-        if (!lwjgl3ifyJars.isEmpty()) {
-            if (lwjgl3ifyJars.size() > 1) {
-                // "Duplicate LWJGL3ify jars found, cannot launch."
-                Tools.dialogOnUiThread(this, R.string.global_error, R.string.mc_download_failed);
-                return false;
-            }
-
-            File lwjgl3ifyJar = lwjgl3ifyJars.get(0);
-
-            // If the version contains lwjgl3ify, its probably someone who knows what they're doing
-            // so lets leave that alone
-            if (!prof.lastVersionId.toLowerCase().contains("lwjgl3ify")) {
-                try {
-                    prof.lastVersionId = LWJGL3ifyUtils.installJson(lwjgl3ifyJar).id;
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-                LauncherProfiles.mainProfileJson.profiles.put(selectedProfile, prof);
-                LauncherProfiles.write();
-
-
-            }
-            // We just installed a json, we need internet + online acc to download so we add super
-            // basic detection whether lwjgl3ify assets were downloaded
-            try {
-                String jsonPath = LWJGL3ifyUtils.getJsonPath(LWJGL3ifyUtils.getProfileID(lwjgl3ifyJar));
-                File lwjgl3ifyClientJar = new File(jsonPath.replace(".json", ".jar"));
-                if (!lwjgl3ifyClientJar.exists()){
-                    if (mAccountSpinner.getSelectedAccount().isLocal() || !isOnline(this)){
-                        Tools.dialogOnUiThread(this, R.string.global_error, R.string.mc_download_failed);
-                        return false;
-                    }
-                }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        String normalizedVersionId = AsyncMinecraftDownloader.normalizeVersionId(prof.lastVersionId);
-        JMinecraftVersionList.Version mcVersion = AsyncMinecraftDownloader.getListedVersion(normalizedVersionId);
-
-        // Do not load when is a modded version or older than minecraft 1.3 on demo account
-        if (mAccountSpinner.getSelectedAccount().isDemo()) {
-            boolean isOlderThan13 = true;
-
-            if (mcVersion != null) {
-                try {
-                    isOlderThan13 = DateUtils.dateBefore(DateUtils.parseReleaseDate(mcVersion.releaseTime), 2012, 6, 22);
-                } catch (ParseException ignored) {}
-            }
-
-            if (isOlderThan13) {
-                hasNoOnlineProfileDialog(this, getString(R.string.global_error), getString(R.string.demo_versions_supported));
-                return false;
-            }
-        }
-
-        new MinecraftDownloader().start(
-                this,
-                mcVersion,
-                normalizedVersionId,
-                new ContextAwareDoneListener(this, normalizedVersionId)
-        );
+        if (snakeLaunchAction != null) snakeLaunchAction.run();
         return false;
     };
 
@@ -291,6 +208,11 @@ public class LauncherActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_pojav_launcher);
         FragmentManager fragmentManager = getSupportFragmentManager();
+        Fragment restored = fragmentManager.findFragmentById(R.id.container_fragment);
+        if (restored instanceof SelectAuthFragment || restored instanceof MicrosoftLoginFragment
+                || restored instanceof mc.snakenest.launcher.android.fragments.LocalLoginFragment) {
+            fragmentManager.popBackStackImmediate("ROOT", 0);
+        }
         // If we don't have a back stack root yet...
         if(fragmentManager.getBackStackEntryCount() < 1) {
             // Manually add the first fragment to the backstack to get easily back to it
@@ -487,7 +409,6 @@ public class LauncherActivity extends BaseActivity {
     private void bindViews(){
         mFragmentView = findViewById(R.id.container_fragment);
         mSettingsButton = findViewById(R.id.setting_button);
-        mAccountSpinner = findViewById(R.id.account_spinner);
         mProgressLayout = findViewById(R.id.progress_layout);
     }
 }

@@ -29,6 +29,7 @@ public final class SnakeUi extends ContextWrapper {
     private final Runnable observer = this::render;
     public SnakeUi(LauncherActivity host, View menu) {
         super(host); this.host=host; this.menu=menu; repo=SnakeRepository.get(host);
+        host.bindSnakeActions(this::account, this::play);
         host.getLifecycle().addObserver((androidx.lifecycle.LifecycleEventObserver)(owner,event)->{
             if(event==androidx.lifecycle.Lifecycle.Event.ON_DESTROY && repo.observer==observer) repo.observer=null;
         });
@@ -71,7 +72,7 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void render() {
         if(isFinishing()||isDestroyed()) return;
-        ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.player==null?"Se connecter à Snake N3st":repo.player.username());
+        ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.sessionRejected?"Revalider la session Snake N3st":repo.player==null?"Se connecter à Snake N3st":repo.player.username());
         ModpackSummary pack=selected();
         var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
         account.setAvatar(repo.player==null?null:repo.player.avatar(),repo.site());
@@ -79,12 +80,20 @@ public final class SnakeUi extends ContextWrapper {
         picker.submitPacks(repo.packs,pack==null?null:pack.slug(),repo.site(),chosen->{
             repo.prefs.edit().putString("selected-pack",chosen.slug()).apply(); render();
         });
-        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.session==null?"Se connecter":"Jouer");
+        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.sessionRejected?"Revalider":repo.session==null?"Se connecter":"Jouer");
         if(repo.loginUrl!=null && !repo.loginUrl.equals(openedLogin)) { openedLogin=repo.loginUrl; open(openedLogin); }
         if(repo.error!=null && !repo.error.equals(shownError)) { shownError=repo.error; notice("Opération impossible",repo.error); }
     }
     private void account() {
         repo.observer=observer;
+        if (repo.sessionRejected) {
+            new AlertDialog.Builder(this).setTitle("Revalider cet appareil")
+                .setMessage("La requête de session a été refusée. La clé est conservée ; vérifie aussi l’horloge de cet appareil.")
+                .setNeutralButton("Annuler",null)
+                .setNegativeButton("Réessayer",(d,w)->repo.work("Validation de la session…",repo::refresh))
+                .setPositiveButton("Se reconnecter",(d,w)->idle(repo::login)).show();
+            return;
+        }
         if(repo.session==null) {
             if(repo.pin.isEnabled() && repo.pinKey==null) askPin(false); else idle(repo::login);
         } else panel("Compte Snake N3st",this::showSettings);
@@ -98,13 +107,13 @@ public final class SnakeUi extends ContextWrapper {
                     repo.main.postDelayed(()->{ if(!Sn3GameBridge.isRunning(host)) repo.work("Protection des fichiers…",repo::sealAll); },1500);
                 }).show(); return;
         }
-        if(repo.session==null) { account(); return; }
+        if(repo.session==null || repo.sessionRejected) { account(); return; }
         ModpackSummary pack=selected();
         if(pack==null) { selectPack(); return; }
         repo.work("Préparation de "+pack.name()+"…",()->Sn3GameBridge.launch(host,repo,pack.slug()));
     }
     private void selectPack() {
-        if(repo.session==null) { account(); return; }
+        if(repo.session==null || repo.sessionRejected) { account(); return; }
         if(repo.packs.isEmpty()) { repo.work("Chargement des modpacks…",repo::refresh); return; }
         ((com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner)).showPicker();
     }

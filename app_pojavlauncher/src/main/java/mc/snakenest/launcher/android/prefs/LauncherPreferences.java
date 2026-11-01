@@ -131,15 +131,13 @@ public class LauncherPreferences {
                     PREF_CUSTOM_JAVA_ARGS.replace(arg, "")).apply();
             }
         }
-        if(DEFAULT_PREF.contains("defaultRuntime")) {
-            PREF_DEFAULT_RUNTIME = DEFAULT_PREF.getString("defaultRuntime","");
-        }else{
-            if(MultiRTUtils.getInstalledRuntimes().isEmpty()) {
-                PREF_DEFAULT_RUNTIME = "";
-                return;
-            }
-            PREF_DEFAULT_RUNTIME = MultiRTUtils.getInstalledRuntimes().get(0).name;
-            LauncherPreferences.DEFAULT_PREF.edit().putString("defaultRuntime",LauncherPreferences.PREF_DEFAULT_RUNTIME).apply();
+        String configuredRuntime = DEFAULT_PREF.getString("defaultRuntime", "");
+        if (configuredRuntime != null && !configuredRuntime.isEmpty()) {
+            // Preserve explicit user choices, including existing Java 8 installations.
+            PREF_DEFAULT_RUNTIME = configuredRuntime;
+        } else {
+            PREF_DEFAULT_RUNTIME = mc.snakenest.launcher.android.NewJREUtil.BUNDLED_RUNTIME_NAME;
+            DEFAULT_PREF.edit().putString("defaultRuntime", PREF_DEFAULT_RUNTIME).apply();
         }
     }
 

@@ -35,6 +35,7 @@ final class SnakeRepository {
     volatile String status = "Prêt";
     volatile String error;
     volatile PlayerSession session;
+    volatile boolean sessionRejected;
     volatile PlayerInfo player;
     volatile SecretKey pinKey;
     volatile List<ModpackSummary> packs = List.of();
@@ -106,12 +107,23 @@ final class SnakeRepository {
         }
         throw new IllegalStateException("Délai de connexion dépassé.");
     }); }
-    void refresh() throws Exception { player = auth().fetchPlayerInfo(requireSession()); packs = api().listModpacks(session); }
+    void refresh() throws Exception {
+        try { player = auth().fetchPlayerInfo(requireSession()); }
+        catch (LauncherApiException e) {
+            if (e.statusCode() == 401 || e.statusCode() == 403) {
+                sessionRejected = true; player = null; packs = List.of();
+                throw new java.io.IOException("Session à revalider. Vérifie l’horloge de cet appareil ou reconnecte-toi. La clé locale est conservée.", e);
+            }
+            throw e;
+        }
+        sessionRejected = false;
+        packs = api().listModpacks(session);
+    }
     PlayerSession requireSession() { if (session == null) throw new IllegalStateException("Connecte-toi d’abord."); return session; }
     void logout() { work("Déconnexion…", () -> {
         boolean revoked = true;
         if (session != null) try { auth().revokeKey(session); } catch (Exception e) { revoked = false; }
-        sealAll(); store.delete(); session = null; player = null; packs = List.of();
+        sealAll(); store.delete(); session = null; sessionRejected = false; player = null; packs = List.of();
         if (!revoked) throw new java.io.IOException("Session locale supprimée. La révocation distante a échoué : vérifie tes clés sur le site.");
     }); }
     void sealAll() throws Exception {

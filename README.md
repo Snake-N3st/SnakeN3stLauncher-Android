@@ -29,7 +29,15 @@ Comme sur PC, sans racines configurées la vérification des signatures des mani
 
 L’APK se trouve dans `app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk`.
 
-Pour embarquer Java 8, télécharger l’artifact public `jre8-pojav` du workflow `build.yml`, branche `buildjre8`, du dépôt `AngelAuraMC/angelauramc-openjdk-build`, dans `app_pojavlauncher/src/main/assets/components/jre/`. Les instructions Amethyst originales sont conservées dans [README.amethyst.md](README.amethyst.md). Les runtimes modernes peuvent être téléchargés depuis les paramètres Amethyst.
+L’APK embarque **Java 21 uniquement**, sous le nom `Internal-21`, pour les quatre ABI Android (`arm`, `arm64`, `x86`, `x86_64`). Préparer les assets avant une compilation locale :
+
+```sh
+./scripts/prepare-jre21.sh
+```
+
+Le script récupère les archives de la [release officielle Amethyst Java 21](https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/tag/download_jre21), vérifie leurs SHA-256, puis utilise le repacker officiel épinglé au commit `4527b5a73dcf3f890b45eab4c6a91651ea28a5ea` à priorité CPU minimale (`nice -n 19`). Prérequis de préparation : Bash, curl, GNU tar, xz, sha256sum et une connexion GitHub. La CI exécute cette même préparation. L’artifact amont s’appelle bien `jre21-pojav` (workflow `build.yml`, branche `buildjre17-21`), mais ses anciens exemplaires ont expiré : les archives de release assurent une source durable et vérifiable. Les assets générés `components/jre-21/` sont ignorés par Git ; les anciens assets Java 8/17/25 sont retirés de l’APK lors de la préparation.
+
+Une nouvelle installation utilise Java 21 par défaut. Une mise à jour conserve les choix de runtime enregistrés et les profils qui ciblent explicitement un Java 8 installé (`Internal` ou `External-8`) ; aucun runtime installé n’est renommé ou remplacé par Java 21. Java 8 reste téléchargeable depuis les paramètres des runtimes. Certains anciens modpacks, notamment ceux dont Forge impose Java 8, doivent sélectionner ce runtime dans leur profil. Java 17 et Java 25 restent également téléchargeables si un pack les exige. Cette modification évite d’embarquer plusieurs JRE ; elle ne garantit pas que Java 21 seul soit plus petit que Java 8 seul. Les instructions Amethyst originales sont conservées dans [README.amethyst.md](README.amethyst.md).
 
 Le script de compilation impose `nice -n 19`, la priorité disque inactive si disponible, deux workers et un daemon non réutilisé. Toujours l’utiliser pour les compilations.
 

@@ -6,15 +6,10 @@
     android:layout_height="match_parent"
     android:background="@color/background_app">
 
-    <com.kdt.mcgui.mcAccountSpinner
+    <Space
         android:id="@+id/account_spinner"
-        android:visibility="invisible"
         android:layout_width="match_parent"
         android:layout_height="@dimen/_52sdp"
-
-        android:dropDownWidth="@dimen/_250sdp"
-        android:dropDownVerticalOffset="@dimen/_52sdp"
-
         app:layout_constraintTop_toTopOf="parent" />
 
     <mc.snakenest.launcher.android.snaken3st.SnakeAccountView
