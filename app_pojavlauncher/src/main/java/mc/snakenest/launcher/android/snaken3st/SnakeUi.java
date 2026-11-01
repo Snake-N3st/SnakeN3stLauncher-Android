@@ -57,6 +57,7 @@ public final class SnakeUi extends ContextWrapper {
         View accountButton=host.findViewById(R.id.sn3_account_button);
         accountButton.setPressed(false); accountButton.jumpDrawablesToCurrentState();
         repo.observer=observer; render();
+        SnakeUpdater.get(host).onResume(host);
         if(!restoreAttempted && repo.session==null && repo.store.exists() && !repo.busy) {
             restoreAttempted=true; if(repo.pin.isEnabled()) askPin(false); else repo.unlock(new char[0]);
         } else if(repo.session!=null && repo.pinKey!=null && !repo.busy && !Sn3GameBridge.isRunning(host)) repo.work("Protection des fichiers…",repo::sealAll);
@@ -168,7 +169,10 @@ public final class SnakeUi extends ContextWrapper {
 
         button(content,"Éditeur des contrôles",() -> startActivity(new Intent(this,CustomControlsActivity.class)));
         button(content,"Signaler un bug",this::reportBug);
-        button(content,"Mises à jour Android",() -> open("https://github.com/Snake-N3st/SnakeN3stLauncher-Android/releases"));
+        button(content,"Rechercher une mise à jour du launcher",() -> SnakeUpdater.get(host).check(host,true));
+        Switch automaticUpdates = new Switch(this); automaticUpdates.setText("Vérifier automatiquement les mises à jour");
+        automaticUpdates.setChecked(SnakeUpdater.get(host).automatic());
+        automaticUpdates.setOnCheckedChangeListener((view,enabled) -> SnakeUpdater.get(host).setAutomatic(enabled)); content.addView(automaticUpdates);
         button(content,"Site Snake N3st",() -> open(repo.site()));
         button(content,"Code source et licences",() -> open("https://github.com/Snake-N3st/SnakeN3stLauncher-Android"));
         text("Snake N3st pour Android\nBasé sur Amethyst / PojavLauncher. Cœur Snake N3st sous GPL-3.0 ; voir les licences dans le dépôt.",14,Color.LTGRAY);

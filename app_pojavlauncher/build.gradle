@@ -72,6 +72,25 @@ if (sn3Origin.scheme != 'https' || !sn3Origin.host || sn3Origin.rawQuery || sn3O
     throw new GradleException('sn3.baseUrl must be an HTTPS origin, without credentials, query or path')
 }
 
+// Android uses versionCode, never a version-name comparison, to decide whether an APK is newer.
+def sn3VersionCodeText = providers.gradleProperty('sn3.versionCode').getOrElse('10000001')
+if (!(sn3VersionCodeText ==~ /[1-9][0-9]{0,9}/) || sn3VersionCodeText.toBigInteger() > 2100000000G) {
+    throw new GradleException('sn3.versionCode must be an integer between 1 and 2100000000, without signs or spaces')
+}
+def sn3VersionCode = sn3VersionCodeText.toInteger()
+def sn3VersionName = providers.gradleProperty('sn3.versionName').getOrElse('0.2.0')
+if (!(sn3VersionName ==~ /[0-9A-Za-z][0-9A-Za-z.+_-]{0,79}/)) {
+    throw new GradleException('sn3.versionName must contain 1 to 80 ASCII letters, digits, dots, plus, underscores or hyphens')
+}
+def sn3ReleasePath = System.getenv('SN3_RELEASE_KEYSTORE_PATH')
+def sn3ReleasePassword = System.getenv('SN3_RELEASE_KEYSTORE_PASSWORD')
+def sn3ReleaseAlias = System.getenv('SN3_RELEASE_KEY_ALIAS')
+def sn3ReleaseSigningConfigured = [sn3ReleasePath, sn3ReleasePassword, sn3ReleaseAlias].every { it != null && !it.isEmpty() }
+def sn3ReleaseRequested = gradle.startParameter.taskNames.any { it.tokenize(':').last().toLowerCase().contains('release') }
+if (sn3ReleaseRequested && !sn3ReleaseSigningConfigured) {
+    throw new GradleException('Release signing requires SN3_RELEASE_KEYSTORE_PATH, SN3_RELEASE_KEYSTORE_PASSWORD and SN3_RELEASE_KEY_ALIAS; an unsigned production APK will not be built')
+}
+
 configurations {
     instrumentedClasspath {
         canBeConsumed = false
@@ -98,6 +117,14 @@ android {
             keyAlias "android_github_release"
             keyPassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
         }
+        if (sn3ReleaseSigningConfigured) {
+            sn3Release {
+                storeFile file(sn3ReleasePath)
+                storePassword sn3ReleasePassword
+                keyAlias sn3ReleaseAlias
+                keyPassword sn3ReleasePassword
+            }
+        }
         googlePlayBuild {
             storeFile file("upload.jks")
             storePassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
@@ -110,11 +137,12 @@ android {
         applicationId "mc.snakenest.launcher.android"
         minSdkVersion 26
         targetSdkVersion 34
-        versionCode 10000000
-        versionName "0.1.0"
+        versionCode sn3VersionCode
+        versionName sn3VersionName
         buildConfigField 'String', 'SN3_BASE_URL', JsonOutput.toJson(providers.gradleProperty('sn3.baseUrl').getOrElse('https://snake-n3st.fr'))
         buildConfigField 'String', 'SN3_CLIENT_ID', JsonOutput.toJson(providers.gradleProperty('sn3.clientId').getOrElse(''))
         buildConfigField 'String', 'SN3_ROOT_KEYS', JsonOutput.toJson(providers.gradleProperty('sn3.modpackRootKeys').getOrElse(''))
+        testInstrumentationRunner "mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation"
         multiDexEnabled true //important
         resValue 'string', 'curseforge_api_key', getCFApiKey()
         externalNativeBuild {
@@ -152,7 +180,7 @@ android {
             // Don't set to true or java.awt will be a.a or something similar.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (file("aamc_upload.jks").exists() && System.getenv("GPLAY_KEYSTORE_PASSWORD")) signingConfig signingConfigs.customRelease
+            if (sn3ReleaseSigningConfigured) signingConfig signingConfigs.sn3Release
             // defaultConfig already set
             // multiDexEnabled = true
             // debuggable = true
@@ -268,3 +296,12 @@ dependencies {
 
 }
 apply from: rootProject.file('gradle/prefab_bypass.gradle')
+
+// Aggregate tasks can select release without mentioning it on the command line.
+tasks.configureEach { task ->
+    if (task.name in ['assembleRelease', 'bundleRelease', 'packageRelease', 'validateSigningRelease']) {
+        task.doFirst {
+            if (!sn3ReleaseSigningConfigured) throw new GradleException('Production APK signing is not configured; refusing unsigned release packaging')
+        }
+    }
+}
