@@ -1,3 +1,4 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="launcher-update" path="sn3-updates/" />
+    <cache-path name="game-crash-reports" path="sn3-crash-reports/" />
 </paths>

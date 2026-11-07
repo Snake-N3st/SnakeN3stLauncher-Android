@@ -22,11 +22,13 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private boolean iconCacheChecks;
     private boolean jvmSettingsChecks;
     private boolean loginChecks;
+    private boolean crashReportChecks;
     @Override public void onCreate(Bundle arguments) {
         offlineChecks=arguments!=null && "true".equals(arguments.getString("offline"));
         iconCacheChecks=arguments!=null && "true".equals(arguments.getString("iconCache"));
         jvmSettingsChecks=arguments!=null && "true".equals(arguments.getString("jvmSettings"));
         loginChecks=arguments!=null && "true".equals(arguments.getString("login"));
+        crashReportChecks=arguments!=null && "true".equals(arguments.getString("crashReport"));
         super.onCreate(arguments);
         start();
     }
@@ -37,6 +39,7 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
         if(iconCacheChecks) { IconCacheChecks.run(this); return; }
         if(jvmSettingsChecks) { JvmSettingsChecks.run(this); return; }
         if(loginChecks) { LoginScreenChecks.run(this); return; }
+        if(crashReportChecks) { CrashReportChecks.run(this); return; }
         Bundle result = new Bundle();
         int passed = 0;
         StringBuilder failures = new StringBuilder();

@@ -147,3 +147,16 @@ adb shell am instrument -w -e login true \
 Ce test ne déconnecte pas le compte réel et ne lance pas de connexion distante. La capture de son écran est conservée dans le cache privé sous `sn3-login-check.png`.
 
 La limite de transferts Minecraft est stockée dans la préférence `sn3.downloadThreads` (8 par défaut, bornée entre 2 et 16). Les requêtes HEAD de planification sont évitées, les destinations sont dédupliquées, et Java participe au même lot borné que les fichiers. Les métadonnées héritées sont résolues avant ce lot. Les transferts échoués ou annulés ne remplacent pas leur fichier précédent et les workers s’arrêtent avant que l’opération rende la main.
+
+## Rapports de plantage Android
+
+`ExitActivity` conserve son point d’entrée JNI et ouvre un écran complet dans le processus du launcher, indépendant de la JVM du jeu. Le rapport rassemble le contexte du dernier lancement, les rapports Minecraft et Java récents, et les journaux disponibles. Les gros fichiers sont présentés sous forme d’extraits identifiés. Les valeurs d’authentification reconnues sont masquées avant affichage, stockage et export ; aucun rapport n’est envoyé automatiquement.
+
+Les dix derniers rapports sont conservés dans le stockage privé. **Paramètres → Dernier rapport de jeu** permet de rouvrir le plus récent. L’envoi demande une confirmation et une description facultative ; au-delà de la limite du serveur, il conserve le début et la fin du rapport. Le fichier exporté contient tous les extraits collectés.
+
+```bash
+adb shell am instrument -w -e crashReport true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+```
+
+Ce contrôle utilise uniquement des journaux synthétiques isolés : collecte, exclusion des anciens rapports, masquage, sauvegarde/relecture, rejet des chemins invalides, rendu de l’écran et accès FileProvider. Il ne lance pas Minecraft, ne lit pas les journaux réels et n’envoie aucun rapport. Résultat attendu : `success=true`, `checks=9`, `httpRequests=0`. Capture privée : `cache/sn3-report-check.png`.

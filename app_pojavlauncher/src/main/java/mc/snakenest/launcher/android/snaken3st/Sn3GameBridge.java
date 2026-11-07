@@ -62,6 +62,7 @@ public final class Sn3GameBridge {
             }
         }
         Intent game = new Intent(activity, MainActivity.class);
+        game.putExtra("sn3.offline",r.offlineMode);
         game.putExtra(MainActivity.INTENT_MINECRAFT_VERSION, version);
         game.putExtra(SEED, r.session.key().seed()); game.putExtra(MEMORY, settings.memoryMb());
         game.putExtra(ARGUMENTS, SnakeJvmSettings.validateArguments(Objects.toString(settings.extraJvmArgs(), "")));

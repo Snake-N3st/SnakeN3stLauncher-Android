@@ -415,18 +415,14 @@ public class JREUtils {
         chdir(gameDirectory == null ? Tools.DIR_GAME_NEW : gameDirectory.getAbsolutePath());
         userArgs.add(0,"java"); //argv[0] is the program name according to C standard.
 
+        mc.snakenest.launcher.android.snaken3st.GameCrashReports.recordLaunch(activity,gameDirectory,runtimeHome);
         mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.addToken(activity, gameDirectory, userArgs);
         final int exitCode;
         try { exitCode = VMLauncher.launchJVM(userArgs.toArray(new String[0])); }
         finally { mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.sealAfterExit(activity, gameDirectory); }
         Logger.appendToLog("Java Exit code: " + exitCode);
-        if (exitCode != 0) {
-            LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder)->
-                    builder.setMessage(activity.getString(R.string.mcn_exit_title, exitCode))
-                    .setPositiveButton(R.string.main_share_logs, (dialogInterface, which)-> shareLog(activity));
+        if (exitCode != 0) mc.snakenest.launcher.android.ExitActivity.showExitMessage(activity,exitCode,false);
 
-            LifecycleAwareAlertDialog.haltOnDialog(activity.getLifecycle(), activity, dialogCreator);
-        }
         Tools.fullyExit();
     }
 

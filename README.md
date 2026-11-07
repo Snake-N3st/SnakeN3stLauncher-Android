@@ -30,6 +30,7 @@ Connectez votre compte Snake N3st, choisissez un modpack et retrouvez ses mods, 
 | **Hors connexion** | Lancement des packs déjà installés avec la session sauvegardée ; avatars et icônes restent disponibles depuis leur cache sur disque. |
 | **Actualités** | Articles illustrés, date et auteur, avec ouverture dans le navigateur. |
 | **Mises à jour** | Recherche automatique ou manuelle des versions publiées ; vérification de l’APK avant confirmation de l’installation par Android. |
+| **Rapports de plantage** | Contexte du lancement et journaux consultables, copie, export, partage et envoi volontaire à l’équipe. Le dernier rapport reste accessible dans les paramètres. |
 | **Jeu** | Réglages par modpack, mémoire et arguments JVM, contrôles tactiles et paramètres Amethyst. |
 
 ## Installer et jouer

@@ -1,48 +1,19 @@
 package mc.snakenest.launcher.android;
 
-import static mc.snakenest.launcher.android.Tools.shareLog;
-
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
-
 import androidx.annotation.Keep;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
+import mc.snakenest.launcher.android.snaken3st.GameCrashActivity;
 
+/** Stable native/JNI entry point; the report itself lives in the launcher process. */
 @Keep
-public class ExitActivity extends AppCompatActivity {
-
-    @SuppressLint("StringFormatInvalid") //invalid on some translations but valid on most, cant fix that atm
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        int code = -1;
-        boolean isSignal = false;
-        Bundle extras = getIntent().getExtras();
-        if(extras != null) {
-            code = extras.getInt("code",-1);
-            isSignal = extras.getBoolean("isSignal", false);
-        }
-
-        int message = isSignal ? R.string.mcn_signal_title : R.string.mcn_exit_title;
-
-        new AlertDialog.Builder(this)
-                .setMessage(getString(message,code))
-                .setPositiveButton(R.string.main_share_logs, (dialog, which) -> shareLog(this))
-                .setOnDismissListener(dialog -> ExitActivity.this.finish())
-                .show();
+public class ExitActivity extends GameCrashActivity {
+    private static final java.util.concurrent.atomic.AtomicBoolean opened=new java.util.concurrent.atomic.AtomicBoolean();
+    public static void showExitMessage(Context context,int code,boolean isSignal) {
+        if(code==0&&!isSignal||!opened.compareAndSet(false,true))return;
+        try {
+        context.startActivity(new Intent(context,ExitActivity.class).putExtra("code",code).putExtra("isSignal",isSignal)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
+        }catch(RuntimeException failure){opened.set(false);/* Never prevent termination of the game process. */}
     }
-
-    public static void showExitMessage(Context ctx, int code, boolean isSignal) {
-        Intent i = new Intent(ctx,ExitActivity.class);
-        i.putExtra("code",code);
-        i.putExtra("isSignal", isSignal);
-        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        ctx.startActivity(i);
-    }
-
 }

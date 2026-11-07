@@ -215,6 +215,9 @@ public final class SnakeUi extends ContextWrapper {
             .setTitle("Se déconnecter ?").setMessage(repo.offlineMode?"La session sera supprimée de cet appareil. La clé distante ne pourra pas être révoquée hors connexion.":"La clé de cet appareil sera révoquée sur le site et sa session locale supprimée.")
             .setNegativeButton("Annuler",null).setPositiveButton("Déconnexion",(d,w)->repo.logout()).show()));
         section("Launcher");
+        if(GameCrashReports.latest(this)!=null)accountAction("Dernier rapport de jeu","Consulter, enregistrer ou partager le rapport",android.R.drawable.ic_menu_info_details,false,()->{
+            var latest=GameCrashReports.latest(this);if(latest!=null)startActivity(new Intent(this,mc.snakenest.launcher.android.ExitActivity.class).putExtra("report",latest.getFileName().toString()));
+        });
         accountAction("Commandes tactiles","Ouvrir l’éditeur Amethyst",android.R.drawable.ic_menu_edit,false,()->startActivity(new Intent(this,CustomControlsActivity.class)));
         accountAction("Mises à jour du launcher",repo.offlineMode?"Connexion nécessaire":"Rechercher une nouvelle version",android.R.drawable.ic_popup_sync,false,()->{
             if(repo.offlineMode)notice("Hors connexion","Les mises à jour sont indisponibles hors connexion.");else SnakeUpdater.get(host).check(host,true);
