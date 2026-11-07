@@ -25,7 +25,7 @@ Connectez votre compte Snake N3st, choisissez un modpack et retrouvez ses mods, 
 | --- | --- |
 | **Compte** | Écran de connexion dédié, validation dans le navigateur, avatar carré, panneau de profil et protection par PIN optionnelle. Un même compte peut être utilisé sur plusieurs appareils. |
 | **Modpacks** | Catalogue Snake N3st, sélecteur Amethyst avec les vraies icônes, choix du canal et de la version, installation, réparation et désinstallation. |
-| **Mods** | Onglets Instance, Mods et Modrinth ; icônes des mods, activation, désactivation, retrait et installation de versions compatibles avec leurs dépendances. |
+| **Mods** | Catalogue populaire Modrinth, fiches avec auteur et icône, installation rapide, versions et compatibilité, identification des mods installés, activation, retrait, import de fichiers `.jar` et confirmation des dépendances. |
 | **Téléchargements** | Téléchargement des fichiers du pack par lots ; fichiers Minecraft et Java téléchargés en parallèle, vérification des empreintes Minecraft et progression du transfert. |
 | **Hors connexion** | Lancement des packs déjà installés avec la session sauvegardée ; avatars et icônes restent disponibles depuis leur cache sur disque. |
 | **Actualités** | Articles illustrés, date et auteur, avec ouverture dans le navigateur. |

@@ -69,6 +69,13 @@ public final class ModrinthApiClient {
         });
     }
 
+    /** Resolves a pinned dependency even when Modrinth omits its project id. */
+    public ModrinthVersion getVersion(String versionId) throws IOException, InterruptedException, ModrinthApiException {
+        JsonResponse response = http.get(BASE.resolve("version/" + versionId));
+        requireSuccess(response, "fetching Modrinth version " + versionId);
+        return response.as(ModrinthVersion.class);
+    }
+
     /** Just enough to show a missing dependency's real name in a prompt instead of a bare project id. */
     public ModrinthProjectSummary getProject(String projectId) throws IOException, InterruptedException, ModrinthApiException {
         URI uri = BASE.resolve("project/" + projectId);

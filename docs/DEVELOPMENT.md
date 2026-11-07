@@ -160,3 +160,18 @@ adb shell am instrument -w -e crashReport true \
 ```
 
 Ce contrôle utilise uniquement des journaux synthétiques isolés : collecte, exclusion des anciens rapports, masquage, sauvegarde/relecture, rejet des chemins invalides, rendu de l’écran et accès FileProvider. Il ne lance pas Minecraft, ne lit pas les journaux réels et n’envoie aucun rapport. Résultat attendu : `success=true`, `checks=9`, `httpRequests=0`. Capture privée : `cache/sn3-report-check.png`.
+
+## Catalogue et installation des mods
+
+Le gestionnaire Android reprend le parcours PC : catalogue populaire ou recherche, fiche de projet, installation rapide et sélection de version. Les projets et versions compatibles apparaissent en premier ; les autres restent consultables et leur installation est désactivée. Les versions stables, bêta et alpha peuvent être filtrées. Les fichiers installés sont identifiés par SHA-1 via une requête groupée Modrinth, et les vérifications de mises à jour concernent seulement les projets installés parmi les résultats affichés.
+
+Avant le téléchargement, le plan de dépendances transitives est figé et confirmé avec les versions et la taille prévue. Les dépendances actives compatibles sont réutilisées ; les versions imposées, conflits et cycles sont contrôlés. Les écritures restent temporaires puis atomiques après vérification des empreintes et de la blacklist. L’import utilise le sélecteur de documents Android ; il est borné à 512 Mio et valide les métadonnées Fabric, Quilt, Forge (y compris `mcmod.info`) ou NeoForge. La compatibilité d’un fichier importé reste à vérifier par son utilisateur. Le mode en ligne est nécessaire pour consulter la blacklist.
+
+```bash
+adb shell am instrument -w -e modBrowser true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+adb shell am instrument -w -e newsUi true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+```
+
+Ces deux contrôles utilisent des dépôts, préférences et comptes fictifs isolés. Ils vérifient le catalogue, les fiches, les versions incompatibles et la navigation arrière, puis la barre Actualités, la restauration de l’en-tête et l’absence du raccourci tactile dans le profil. Aucun mod n’est installé et aucune connexion distante n’est autorisée. Captures dans le cache privé : `sn3-mods-catalogue-check.png`, `sn3-mods-detail-check.png`, `sn3-mods-versions-check.png` et `sn3-news-toolbar-check.png`.

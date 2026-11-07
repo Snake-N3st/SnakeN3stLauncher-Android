@@ -28,7 +28,10 @@ public final class Sn3NewsFragment extends Fragment {
     private SnakeRepository repo;
     private LinearLayout feed;
     private TextView state;
-    private Button refresh,offline;
+    private ImageButton refresh;
+    private Button offline;
+    private final int[] headerIds={R.id.account_spinner,R.id.sn3_account_button,R.id.setting_button};
+    private final int[] headerVisibility=new int[3];
     private ProgressBar progress;
     private java.util.List<Post> rendered;
     private boolean wasOffline;
@@ -37,25 +40,35 @@ public final class Sn3NewsFragment extends Fragment {
     public static void open(LauncherActivity host) {Tools.swapFragment(host,Sn3NewsFragment.class,TAG,null);}
     @Override public void onCreate(@Nullable Bundle saved) {super.onCreate(saved);repo=SnakeRepository.get(requireContext());}
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,@Nullable ViewGroup container,@Nullable Bundle saved) {
-        LinearLayout root=column();root.setBackgroundColor(color(R.color.background_app));root.setPadding(dp(18),dp(12),dp(18),0);
+        LinearLayout root=column();root.setBackgroundColor(color(R.color.background_app));root.setPadding(dp(18),dp(4),dp(18),0);
         LinearLayout toolbar=new LinearLayout(requireContext());toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        Button back=new Button(requireContext());back.setText("Retour");back.setAllCaps(false);back.setOnClickListener(v->getParentFragmentManager().popBackStack());toolbar.addView(back);
-        Space space=new Space(requireContext());toolbar.addView(space,new LinearLayout.LayoutParams(0,1,1));
-        refresh=new Button(requireContext());refresh.setText("Actualiser");refresh.setAllCaps(false);refresh.setOnClickListener(v->refresh());toolbar.addView(refresh);root.addView(toolbar);
-        TextView title=text("Actualités",27,color(R.color.primary_text));title.setTypeface(null,Typeface.BOLD);title.setPadding(0,dp(12),0,dp(4));root.addView(title);
-        TextView subtitle=text("Les nouveautés et les rendez-vous de Snake N3st.",13,color(R.color.secondary_text));subtitle.setPadding(0,0,0,dp(14));root.addView(subtitle);
+        ImageButton back=toolbarButton(R.drawable.ic_arrow_back_white,"Retour");back.setOnClickListener(v->getParentFragmentManager().popBackStack());toolbar.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        TextView title=text("Actualités",22,color(R.color.primary_text));title.setTypeface(null,Typeface.BOLD);title.setGravity(Gravity.CENTER);toolbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        refresh=toolbarButton(R.drawable.sn3_ic_refresh,"Actualiser les actualités");refresh.setOnClickListener(v->refresh());toolbar.addView(refresh,new LinearLayout.LayoutParams(dp(48),dp(48)));root.addView(toolbar,new LinearLayout.LayoutParams(-1,dp(56)));
         progress=new ProgressBar(requireContext(),null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
         state=text("",13,color(R.color.secondary_text));state.setPadding(0,dp(8),0,dp(8));state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(state);
         offline=new Button(requireContext());offline.setText("Passer hors connexion");offline.setAllCaps(false);offline.setOnClickListener(v->{try{repo.goOffline();render();}catch(Exception failure){notice("Hors connexion",failure.getMessage());}});root.addView(offline);
         ScrollView scroll=new ScrollView(requireContext());scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setPadding(0,0,0,dp(18));
         feed=column();scroll.addView(feed);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));return root;
     }
+    @Override public void onViewCreated(@NonNull View view,@Nullable Bundle saved) {
+        super.onViewCreated(view,saved);
+        for(int index=0;index<headerIds.length;index++) {
+            View header=requireActivity().findViewById(headerIds[index]);
+            if(header!=null){headerVisibility[index]=header.getVisibility();header.setVisibility(View.GONE);}
+        }
+    }
     @Override public void onResume() {
         super.onResume();repo.addScreenObserver(observer);render();
         if(repo.posts.isEmpty()&&!repo.busy&&!repo.offlineMode)refresh();
     }
     @Override public void onPause() {repo.removeScreenObserver(observer);super.onPause();}
-    @Override public void onDestroyView() {rendered=null;feed=null;super.onDestroyView();}
+    @Override public void onDestroyView() {
+        for(int index=0;index<headerIds.length;index++) {
+            View header=requireActivity().findViewById(headerIds[index]);if(header!=null)header.setVisibility(headerVisibility[index]);
+        }
+        rendered=null;feed=null;super.onDestroyView();
+    }
     private void refresh() {
         if(repo.offlineMode){render();return;}
         repo.work("Chargement des actualités…",()->repo.posts=new NewsApiClient(repo.http,URI.create(repo.site())).listPosts());
@@ -105,6 +118,11 @@ public final class Sn3NewsFragment extends Fragment {
     private static String plain(String value){return value==null?"":Html.fromHtml(value,Html.FROM_HTML_MODE_LEGACY).toString().replace("**","").replace("__","").replaceAll("\\s+"," ").trim();}
     private void open(String value){try{Uri uri=Uri.parse(value);if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null)throw new IllegalArgumentException("Adresse d’article invalide.");startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(Exception failure){notice("Navigateur indisponible",failure.getMessage());}}
     private void notice(String title,String message){if(isAdded())new AlertDialog.Builder(requireContext()).setTitle(title).setMessage(message).setPositiveButton("OK",null).show();}
+    private ImageButton toolbarButton(int icon,String description) {
+        ImageButton button=new ImageButton(requireContext());button.setImageResource(icon);button.setContentDescription(description);button.setTooltipText(description);
+        button.setPadding(dp(12),dp(12),dp(12),dp(12));button.setScaleType(ImageView.ScaleType.FIT_CENTER);button.setImageTintList(android.content.res.ColorStateList.valueOf(color(R.color.primary_text)));
+        android.util.TypedValue ripple=new android.util.TypedValue();requireContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,ripple,true);button.setBackgroundResource(ripple.resourceId);return button;
+    }
     private LinearLayout column(){LinearLayout layout=new LinearLayout(requireContext());layout.setOrientation(LinearLayout.VERTICAL);return layout;}
     private TextView text(String value,int size,int color){TextView text=new TextView(requireContext());text.setText(value);text.setTextSize(size);text.setTextColor(color);return text;}
     private GradientDrawable rounded(int color,int radius){GradientDrawable drawable=new GradientDrawable();drawable.setColor(color);drawable.setCornerRadius(dp(radius));return drawable;}

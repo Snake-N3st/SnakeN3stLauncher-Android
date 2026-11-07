@@ -23,12 +23,16 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private boolean jvmSettingsChecks;
     private boolean loginChecks;
     private boolean crashReportChecks;
+    private boolean modBrowserChecks;
+    private boolean newsUiChecks;
     @Override public void onCreate(Bundle arguments) {
         offlineChecks=arguments!=null && "true".equals(arguments.getString("offline"));
         iconCacheChecks=arguments!=null && "true".equals(arguments.getString("iconCache"));
         jvmSettingsChecks=arguments!=null && "true".equals(arguments.getString("jvmSettings"));
         loginChecks=arguments!=null && "true".equals(arguments.getString("login"));
+        newsUiChecks=arguments!=null && "true".equals(arguments.getString("newsUi"));
         crashReportChecks=arguments!=null && "true".equals(arguments.getString("crashReport"));
+        modBrowserChecks=arguments!=null && "true".equals(arguments.getString("modBrowser"));
         super.onCreate(arguments);
         start();
     }
@@ -39,6 +43,8 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
         if(iconCacheChecks) { IconCacheChecks.run(this); return; }
         if(jvmSettingsChecks) { JvmSettingsChecks.run(this); return; }
         if(loginChecks) { LoginScreenChecks.run(this); return; }
+        if(newsUiChecks) { NewsUiChecks.run(this); return; }
+        if(modBrowserChecks) { ModBrowserChecks.run(this); return; }
         if(crashReportChecks) { CrashReportChecks.run(this); return; }
         Bundle result = new Bundle();
         int passed = 0;

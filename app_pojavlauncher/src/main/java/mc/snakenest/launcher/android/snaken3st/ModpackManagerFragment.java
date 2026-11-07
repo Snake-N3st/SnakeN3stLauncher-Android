@@ -29,16 +29,12 @@ public final class ModpackManagerFragment extends Fragment {
     private boolean wasBusy;
     private int scanGeneration;
     private boolean scanning;
-    private String query = "";
-    private String versionTitle;
-    private ModpackManifest versionManifest;
-    private List<ModrinthSearchHit> hits = List.of();
-    private List<ModrinthVersion> versions;
+    private SnakeModBrowser browser;
+    private androidx.activity.OnBackPressedCallback browserBack;
     private List<LocalMod> mods = List.of();
     private LinearLayout content;
     private TabHost tabs;
     private final LinearLayout[] pages = new LinearLayout[3];
-    private Path replacedFile;
     private TextView state, progressText, error;
     private ProgressBar progress;
     private Button install, play, offline;
@@ -84,14 +80,16 @@ public final class ModpackManagerFragment extends Fragment {
         super.onCreate(saved); slug = requireArguments().getString("slug"); SnakeRepository.requireSlug(slug);
         repo = SnakeRepository.get(requireContext());
         page = saved == null ? 0 : saved.getInt("page");
-        query = saved == null ? "" : saved.getString("query", "");
+        browser=new SnakeModBrowser(this,repo,slug);browser.restore(saved);
         autoInstall = saved == null && requireArguments().getBoolean("install", false);
     }
     @Override public void onSaveInstanceState(@NonNull Bundle out) {
-        super.onSaveInstanceState(out); out.putInt("page", page); out.putString("query", query);
+        super.onSaveInstanceState(out);browser.save(out); out.putInt("page", page);
     }
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle saved) {
         activity = (LauncherActivity)requireActivity();
+        browserBack=new androidx.activity.OnBackPressedCallback(false){@Override public void handleOnBackPressed(){browser.back();}};
+        activity.getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),browserBack);
         state = view.findViewById(R.id.sn3_manager_state);
         progressText = view.findViewById(R.id.sn3_manager_progress_text); error = view.findViewById(R.id.sn3_manager_error);
         progress = view.findViewById(R.id.sn3_manager_progress); install = view.findViewById(R.id.sn3_manager_install); play = view.findViewById(R.id.sn3_manager_play);
@@ -146,8 +144,8 @@ public final class ModpackManagerFragment extends Fragment {
     }
     @Override public void onDestroyView() { scanGeneration++; scanning = false; super.onDestroyView(); }
     private LauncherActivity host() { return activity; }
-    private boolean ready() { return isAdded() && getView() != null; }
-    private void onMain(Runnable action) { repo.main.post(() -> { if (ready()) action.run(); }); }
+    boolean ready() { return isAdded() && getView() != null; }
+    void onMain(Runnable action) { repo.main.post(() -> { if (ready()) action.run(); }); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void updateState() {
         if (!ready()) return;
@@ -155,13 +153,15 @@ public final class ModpackManagerFragment extends Fragment {
         boolean running = Sn3GameBridge.isRunning(requireContext());
         state.setText(repo.removedPacks.contains(slug)?"Retiré du site":repo.offlineMode?"Hors connexion · téléchargements indisponibles":repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
         install.setText(repo.busy ? "Annuler" : installed ? "Réparer" : "Installer");
-        install.setEnabled(!running && (repo.busy || !repo.localOnly(slug))); play.setVisibility(installed ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
+        install.setVisibility(page==0||repo.busy?View.VISIBLE:View.GONE);
+        getView().findViewById(R.id.sn3_manager_description).setVisibility(page==0?View.VISIBLE:View.GONE);
+        install.setEnabled(!running && (repo.busy || !repo.localOnly(slug))); play.setVisibility(installed && page==0 ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
         offline.setVisibility(!repo.busy && repo.error != null && repo.session != null && repo.offlineAvailable && !repo.offlineMode ? View.VISIBLE : View.GONE);
         error.setText(repo.error); error.setVisibility(repo.error == null ? View.GONE : View.VISIBLE);
         if (!repo.busy) { progress.setVisibility(View.GONE); progressText.setVisibility(View.GONE); progressText.setText(""); }
         for (View control : mutationControls) control.setEnabled(!repo.busy && !running && !(repo.localOnly(slug) && "sn3-online".equals(control.getTag())));
     }
-    private void operation(String label, SnakeRepository.Work work) {
+    void operation(String label, SnakeRepository.Work work) {
         if (repo.busy) return;
         if (Sn3GameBridge.isRunning(requireContext())) { error.setText("Ferme Minecraft avant de modifier cette instance."); error.setVisibility(View.VISIBLE); return; }
         if (repo.session == null || repo.sessionRejected && !repo.offlineMode) { error.setText("Reviens au compte pour valider ta connexion avant de continuer."); error.setVisibility(View.VISIBLE); return; }
@@ -172,14 +172,18 @@ public final class ModpackManagerFragment extends Fragment {
         if (!ready()) return;
         content.removeAllViews(); mutationControls.clear();
         if (page == 0) instancePage(); else if (page == 1) modsPage(); else if(repo.localOnly(slug)) text("La recherche et les mises à jour de mods sont indisponibles hors connexion ou pour un modpack retiré du site.",16,false); else searchPage();
-        updateState();
+        updateState();browserBack.setEnabled(page==2&&browser.hasBack());
     }
+    void disableMutation(View control){mutationControls.remove(control);}
+    void redrawMods(){if(ready()&&page==2)renderPage();}
+    void openModCatalogue(){showPage(2);}
+    void refreshLocalMods(){scanMods();if(page==2)renderPage();}
     private TextView text(String value, int size, boolean bold) {
         TextView view = new TextView(requireContext()); view.setText(value == null ? "" : value); view.setTextSize(size);
         if (bold) view.setTypeface(view.getTypeface(), android.graphics.Typeface.BOLD);
         view.setPadding(0, dp(8), 0, dp(6)); content.addView(view); return view;
     }
-    private Button button(LinearLayout parent, String label, Runnable action, boolean mutates) {
+    Button button(LinearLayout parent, String label, Runnable action, boolean mutates) {
         Button view = new Button(requireContext()); view.setText(label); view.setAllCaps(false); view.setOnClickListener(v -> action.run());
         view.setTextSize(14); view.setMinHeight(dp(48));
         parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
@@ -213,6 +217,7 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private void modsPage() {
         text(scanning ? "Lecture des mods…" : mods.size() + " mods installés", 18, true);
+        Button importJar=button(content,"Importer un .jar",browser::pickImport,true);importJar.setTag("sn3-online");
         if (!scanning && mods.isEmpty()) text("Aucun mod installé. Ajoute un mod depuis Modrinth.", 14, false);
         for (LocalMod mod : mods) {
             LinearLayout card = new LinearLayout(requireContext()); card.setOrientation(LinearLayout.VERTICAL);
@@ -234,9 +239,7 @@ public final class ModpackManagerFragment extends Fragment {
             enabled.setOnClickListener(control -> { enabled.setChecked(!disabled); changeMod(mod,false); });
             LinearLayout actions = new LinearLayout(requireContext()); card.addView(actions);
             Button version = button(actions,"Versions",()-> {
-                replacedFile=mod.file();
-                if(mod.project()!=null) loadVersions(mod.project(),mod.info().name());
-                else { query=mod.info().name(); versions=null; showPage(2); search(); }
+                browser.openInstalled(mod.file(),mod.project(),mod.info().name(),mod.info().author());
             },true);
             version.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));
             Button remove = button(actions,"Supprimer",()->new AlertDialog.Builder(requireContext()).setTitle("Supprimer ce mod ?")
@@ -291,48 +294,9 @@ public final class ModpackManagerFragment extends Fragment {
         });
     }
     private void changeMod(LocalMod mod, boolean remove) {
-        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> repo.changeMod(slug, mod.file(), remove));
+        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> {repo.changeMod(slug, mod.file(), remove);browser.dirty();});
     }
-    private void searchPage() {
-        text("Ajouter ou mettre à jour un mod", 19, true);
-        EditText input = new EditText(requireContext()); input.setSingleLine(true); input.setHint("Rechercher sur Modrinth"); input.setText(query); content.addView(input);
-        button(content, "Rechercher", () -> { query = input.getText().toString().trim(); versions = null; replacedFile = null; search(); }, true);
-        if (versions != null) {
-            button(content, "Retour aux résultats", () -> { versions = null; renderPage(); }, false);
-            text("Versions compatibles · " + versionTitle, 17, true);
-            for (ModrinthVersion version : versions) {
-                separator(); text(version.name(), 16, true); text(version.versionNumber() + " · " + version.versionType(), 14, false);
-                text("Les dépendances obligatoires compatibles seront installées avec cette version.", 13, false);
-                button(content, "Installer cette version", () -> operation("Installation de " + versionTitle + "…", () -> new SnakeMods(repo).install(slug, versionManifest, version, replacedFile)), true);
-            }
-        } else if (hits.isEmpty()) text("Lance une recherche pour afficher les mods et leurs versions compatibles avec ce pack.", 14, false);
-        else for (ModrinthSearchHit hit : hits) {
-            separator();
-            LinearLayout heading = new LinearLayout(requireContext()); heading.setOrientation(LinearLayout.HORIZONTAL); heading.setGravity(android.view.Gravity.CENTER_VERTICAL); content.addView(heading);
-            ImageView icon = new ImageView(requireContext()); icon.setImageResource(R.drawable.ic_folder); heading.addView(icon,new LinearLayout.LayoutParams(dp(40),dp(40)));
-            TextView title = new TextView(requireContext()); title.setText(hit.title()); title.setTextSize(17); title.setPadding(dp(10),0,0,0); heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-            RemoteIconLoader.load(requireContext(),hit.iconUrl(),"https://modrinth.com",drawable -> { if (ready() && drawable != null) icon.setImageDrawable(drawable); });
-            text(hit.description(), 14, false);
-            button(content, "Voir les versions compatibles", () -> loadVersions(hit.projectId(),hit.title()), true);
-        }
-    }
-    private void search() {
-        if(repo.localOnly(slug)) return;
-        operation("Recherche Modrinth…", () -> {
-            List<ModrinthSearchHit> result = new ModrinthApiClient(repo.http).search(query, 20);
-            onMain(() -> { hits = result; versions = null; showPage(2); });
-        });
-    }
-    private void loadVersions(String project, String title) {
-        if(repo.localOnly(slug)) return;
-        operation("Chargement des versions compatibles…", () -> {
-            ModpackManifest manifest = repo.manifest(slug);
-            List<ModrinthVersion> compatible = new ModrinthApiClient(repo.http).versions(project).stream()
-                    .filter(version -> version.isCompatible(manifest.mcVersion(),manifest.loader())).toList();
-            if (compatible.isEmpty()) throw new IOException("Aucune version compatible avec ce modpack.");
-            onMain(() -> { versionManifest = manifest; versionTitle = title; versions = compatible; showPage(2); });
-        });
-    }
+    private void searchPage() {browser.render(content);}
     private void settingsDialog() {
         ModpackSettings settings = new ModpackSettingsStore(repo.dirs).load(slug,ModpackSettings.defaults());
         SnakeJvmSettings jvm = new SnakeJvmSettings(requireContext());
