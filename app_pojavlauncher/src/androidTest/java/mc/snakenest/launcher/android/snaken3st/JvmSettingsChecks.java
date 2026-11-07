@@ -83,6 +83,7 @@ final class JvmSettingsChecks {
             check(policy.resolve("native-pack").extraJvmArgs().equals("-Dnative=kept"));passed++;
             passed+=DownloadIoChecks.run(context);
             passed+=SpeedChecks.run();
+            passed+=LayoutVariantChecks.run(instrumentation);
             result.putBoolean("success",true);
         } catch(Throwable failure) {result.putBoolean("success",false);result.putString("message",failure.getClass().getSimpleName()+": "+failure.getMessage());}
         finally {

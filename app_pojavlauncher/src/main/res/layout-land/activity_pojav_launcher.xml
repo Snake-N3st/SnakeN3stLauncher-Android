@@ -4,18 +4,26 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent">
+    android:background="@color/background_app">
 
-    <com.kdt.mcgui.mcAccountSpinner
+    <Space
         android:id="@+id/account_spinner"
         android:layout_width="match_parent"
         android:layout_height="@dimen/_42sdp"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        android:dropDownWidth="wrap_content"
-        android:dropDownVerticalOffset="@dimen/_42sdp"
-
+    <mc.snakenest.launcher.android.snaken3st.SnakeAccountView
+        android:id="@+id/sn3_account_button"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/_42sdp"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/padding_large"
+        android:text="Se connecter à Snake N3st"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:background="@drawable/sn3_account_background"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/setting_button" />
 
     <ImageButton
         android:id="@+id/setting_button"
@@ -24,11 +32,10 @@
         android:background="?attr/selectableItemBackground"
         android:src="@drawable/ic_menu_settings"
         android:scaleType="fitCenter"
+        android:paddingVertical="@dimen/_8sdp"
 
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
-
-
 
     <!-- Holding most of the dynamic content -->
     <androidx.fragment.app.FragmentContainerView
