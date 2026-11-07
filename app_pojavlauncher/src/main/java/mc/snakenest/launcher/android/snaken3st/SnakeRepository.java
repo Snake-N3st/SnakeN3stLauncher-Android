@@ -37,6 +37,10 @@ final class SnakeRepository {
     volatile String error;
     volatile PlayerSession session;
     volatile boolean sessionRejected;
+    volatile boolean offlineMode;
+    volatile boolean offlineAvailable;
+    volatile Set<String> removedPacks = Set.of();
+    final LocalPackCatalogStore catalog;
     volatile PlayerInfo player;
     volatile SecretKey pinKey;
     volatile List<ModpackSummary> packs = List.of();
@@ -47,6 +51,7 @@ final class SnakeRepository {
         context = c; prefs = c.getSharedPreferences("sn3", Context.MODE_PRIVATE);
         dirs = new AppDirs(c.getNoBackupFilesDir().toPath().resolve("snake-n3st"));
         store = new AndroidSessionStore(c); pin = new PinProtection(dirs);
+        catalog = new LocalPackCatalogStore(dirs.root().resolve("local-pack-catalog.json"), site());
     }
     String site() { return BuildConfig.SN3_BASE_URL; }
     String client() { return BuildConfig.SN3_CLIENT_ID; }
@@ -75,7 +80,7 @@ final class SnakeRepository {
                 work.run(); if (Thread.currentThread().isInterrupted()) throw new InterruptedException(); status = "Prêt";
             }
             catch (InterruptedException e) { Thread.currentThread().interrupt(); status = "Annulé"; }
-            catch (Exception e) { error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); status = "Échec"; }
+            catch (Exception e) { if (session != null) offlineAvailable = true; error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); status = "Échec"; }
             finally {
                 worker = null; Thread.interrupted(); busy = false; loginUrl = null;
                 mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, -1);
@@ -92,6 +97,7 @@ final class SnakeRepository {
             }
             PlayerSession restored = store.load(site(), client(), key);
             pinKey = key; session = restored;
+            if (session != null) { restoreLocalCatalog(); offlineAvailable = true; }
             sealAll(); if (session != null) refresh();
         } finally { Arrays.fill(code, '\0'); }
     }); }
@@ -114,23 +120,72 @@ final class SnakeRepository {
         throw new IllegalStateException("Délai de connexion dépassé.");
     }); }
     void refresh() throws Exception {
-        try { player = auth().fetchPlayerInfo(requireSession()); }
-        catch (LauncherApiException e) {
-            if (e.statusCode() == 401 || e.statusCode() == 403) {
-                sessionRejected = true; player = null; packs = List.of();
-                throw new java.io.IOException("Session à revalider. Vérifie l’horloge de cet appareil ou reconnecte-toi. La clé locale est conservée.", e);
-            }
-            throw e;
+        try {
+            PlayerInfo received = auth().fetchPlayerInfo(requireSession());
+            var remote = api().listModpacks(session);
+            player = received; catalog.cacheUsername(session.playerId(), received.username());
+            packs = catalog.mergeInstalled(remote, installedSlugs());
+            removedPacks = catalog.removedSlugs(installedSlugs());
+            sessionRejected = false; offlineMode = false; RemoteIconLoader.setOffline(false); offlineAvailable = false;
+            SnakePackIcons.refresh(context, remote, site());
+        } catch (Exception failure) {
+            offlineAvailable = session != null;
+            if (failure instanceof LauncherApiException e && (e.statusCode() == 401 || e.statusCode() == 403)) sessionRejected = true;
+            restoreLocalCatalog();
+            throw failure;
         }
-        sessionRejected = false;
-        packs = api().listModpacks(session);
-        SnakePackIcons.refresh(context, packs, site());
+    }
+    Set<String> installedSlugs() {
+        Set<String> slugs = new LinkedHashSet<>();
+        if (Files.isDirectory(dirs.instances(), LinkOption.NOFOLLOW_LINKS)) try (var children = Files.list(dirs.instances())) {
+            for (Path path : children.toList()) try { String slug = path.getFileName().toString(); requireSlug(slug); if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)
+                    && Files.isRegularFile(path.resolve(".sn3-manifest.json"), LinkOption.NOFOLLOW_LINKS)) slugs.add(slug); } catch (RuntimeException ignored) { }
+        } catch (java.io.IOException ignored) { }
+        return slugs;
+    }
+    void restoreLocalCatalog() {
+        Set<String> local = installedSlugs();
+        try { packs = catalog.localSummaries(local); removedPacks = catalog.removedSlugs(local); }
+        catch (java.io.IOException ignored) {
+            packs = local.stream().sorted().map(slug -> new ModpackSummary(slug,slug,"Modpack installé localement",null,false,null,0)).toList();
+            removedPacks = Set.of();
+        }
+    }
+    void goOffline() {
+        if(busy) throw new IllegalStateException("Attends la fin de l’opération avant de passer hors connexion.");
+        requireSession(); offlineMode = true; RemoteIconLoader.setOffline(true); SnakeUpdater.get(context).onEnterOffline(); offlineAvailable = false; error = null; status = "Hors connexion";
+        restoreLocalCatalog(); changed();
+    }
+    boolean localOnly(String slug) { return offlineMode || removedPacks.contains(slug); }
+    void requireOnline(String slug) {
+        if (offlineMode) throw new IllegalStateException("Cette action nécessite une connexion au site. Reviens en ligne depuis le compte.");
+        if (removedPacks.contains(slug)) throw new IllegalStateException("Ce modpack a été retiré du site. Seuls les fichiers déjà installés peuvent être utilisés.");
+    }
+    String cachedUsername() throws java.io.IOException {
+        long id = requireSession().playerId();
+        var account = mc.snakenest.launcher.android.value.MinecraftAccount.load("sn3-" + id);
+        // The existing offline account is authoritative: changing its name changes the world UUID.
+        if (account != null && account.username != null && account.username.matches("[A-Za-z0-9_]{1,16}")) return account.username;
+        return catalog.loadUsername(id).filter(name -> name.matches("[A-Za-z0-9_]{1,16}"))
+                .orElseThrow(() -> new java.io.IOException("Pseudo local introuvable pour ce compte. Connecte-toi une fois et installe ce modpack avant de jouer hors connexion."));
+    }
+    mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile localProfile(String slug) throws java.io.IOException {
+        requireSlug(slug);
+        Path file = Paths.get(mc.snakenest.launcher.android.Tools.GAME_PROFILES_FILE);
+        try {
+            var all = mc.snakenest.launcher.android.Tools.GLOBAL_GSON.fromJson(Files.readString(file), mc.snakenest.launcher.android.value.launcherprofiles.MinecraftLauncherProfiles.class);
+            String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            var profile = all == null || all.profiles == null ? null : all.profiles.get(id);
+            if (profile == null || profile.lastVersionId == null || !profile.lastVersionId.matches("[A-Za-z0-9_.+-]+")
+                    || profile.gameDir == null || !Paths.get(profile.gameDir).toAbsolutePath().normalize().equals(instance(slug).toAbsolutePath().normalize())) throw new java.io.IOException("Profil local du modpack introuvable ou invalide.");
+            return profile;
+        } catch (RuntimeException e) { throw new java.io.IOException("Profil local du modpack illisible.", e); }
     }
     PlayerSession requireSession() { if (session == null) throw new IllegalStateException("Connecte-toi d’abord."); return session; }
     void logout() { work("Déconnexion…", () -> {
         boolean revoked = true;
-        if (session != null) try { auth().revokeKey(session); } catch (Exception e) { revoked = false; }
-        sealAll(); store.delete(); session = null; sessionRejected = false; player = null; packs = List.of();
+        if (session != null && !offlineMode) try { auth().revokeKey(session); } catch (Exception e) { revoked = false; }
+        sealAll(); store.delete(); offlineMode = false; offlineAvailable = false; session = null; sessionRejected = false; player = null; packs = List.of();
         if (!revoked) throw new java.io.IOException("Session locale supprimée. La révocation distante a échoué : vérifie tes clés sur le site.");
     }); }
     void sealAll() throws Exception {
@@ -171,8 +226,17 @@ final class SnakeRepository {
             Path versions = Paths.get(mc.snakenest.launcher.android.Tools.DIR_HOME_VERSION);
             Path json = versions.resolve(profile.lastVersionId).resolve(profile.lastVersionId + ".json");
             Path jar = versions.resolve(profile.lastVersionId).resolve(profile.lastVersionId + ".jar");
-            return Files.isRegularFile(json) && Files.size(json) > 0 && Files.isRegularFile(jar) && Files.size(jar) > 0;
+            return Files.isRegularFile(json) && Files.size(json) > 0 && (Files.isRegularFile(jar) && Files.size(jar) > 0 || inheritedJarExists(json, versions));
         } catch (Exception exception) { return false; }
+    }
+    private boolean inheritedJarExists(Path json, Path versions) {
+        try {
+            var data = com.google.gson.JsonParser.parseString(Files.readString(json)).getAsJsonObject();
+            String parent = data.has("inheritsFrom") ? data.get("inheritsFrom").getAsString() : "";
+            if (!parent.matches("[A-Za-z0-9_.+-]+")) return false;
+            Path jar = versions.resolve(parent).resolve(parent+".jar");
+            return Files.isRegularFile(jar,LinkOption.NOFOLLOW_LINKS) && Files.size(jar)>0;
+        } catch (Exception ignored) { return false; }
     }
     void uninstall(String slug) throws Exception {
         requireSlug(slug);
@@ -181,6 +245,7 @@ final class SnakeRepository {
         // survives until the last traversal step. Retrying Installer then repairs it.
         beginInstallation(slug);
         InstanceUninstaller.delete(dirs.instances(), slug);
+        catalog.removeInstalled(slug);
         InstanceUninstaller.delete(dirs.root().resolve("mod-overrides"), slug);
         Path settings = dirs.modpackSettingsFile(slug);
         if (Files.isSymbolicLink(settings.getParent())) throw new java.io.IOException("Dossier de réglages non sûr : lien symbolique.");
@@ -215,8 +280,8 @@ final class SnakeRepository {
         Path target = file.toAbsolutePath().normalize();
         if (!directory.equals(target.getParent())) throw new java.io.IOException("Le mod n’appartient pas à cette instance.");
         String name = target.getFileName().toString(); String base = ModOverrides.canonicalFilename(name);
-        ModpackManifest manifest = manifest(slug);
-        boolean managed = manifest.files().stream().anyMatch(item -> item.path().equals("mods/"+base));
+        boolean managed = new LocalManifestStore().load(instance(slug)).map(StoredManifest::pathToHash)
+                .map(files -> files.containsKey("mods/"+base)).orElse(false);
         modOverrides(slug).change(instance(slug),name,remove,managed);
         if (remove) {
             var edit = prefs.edit();
@@ -227,13 +292,14 @@ final class SnakeRepository {
 
     ModpackSettings settings(String slug) { return new ModpackSettingsStore(dirs).load(slug, ModpackSettings.defaults()); }
     ModpackManifest manifest(String slug) throws Exception {
-        requireSlug(slug); ModpackSettings s = settings(slug);
+        requireSlug(slug); requireOnline(slug); ModpackSettings s = settings(slug);
         return api().getManifest(slug, prefs.getString("version." + slug, null), s.channel(), requireSession());
     }
     Path instance(String slug) { requireSlug(slug); return dirs.instance(slug); }
     static void requireSlug(String slug) { if (slug == null || !slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*")) throw new IllegalArgumentException("Identifiant de modpack invalide"); }
     ModpackManifest sync(String slug, boolean repair) throws Exception {
         ModpackManifest m = manifest(slug); Path dir = instance(slug);
+        beginInstallation(slug);
         ModpackSettingsStore settings = new ModpackSettingsStore(dirs);
         if (!Files.exists(dirs.modpackSettingsFile(slug))) settings.save(slug, ModpackSettings.defaults(m.defaultMemoryMb(), m.defaultJvmArgs()));
         if (pinKey != null) SensitiveFileVault.decryptAll(dir, pinKey);

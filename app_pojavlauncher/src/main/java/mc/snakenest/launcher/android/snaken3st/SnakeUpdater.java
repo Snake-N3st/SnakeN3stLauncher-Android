@@ -40,16 +40,23 @@ public final class SnakeUpdater {
     private boolean checking, downloading, prompted, pendingPermission, readyToInstall;
     private volatile boolean cancelled;
     private volatile Thread worker;
+    private volatile HttpURLConnection activeConnection;
     private int percent;
     private String progressText = "";
 
     private SnakeUpdater(Context context) {
         app=context.getApplicationContext(); prefs=app.getSharedPreferences("sn3-updates",Context.MODE_PRIVATE);
         SnakeRepository.get(app).addScreenObserver(() -> {
-            if(available!=null && !prompted && automatic() && !downloading && idle()) showAvailable();
+            if(!offline() && available!=null && !prompted && automatic() && !downloading && idle()) showAvailable();
         });
     }
     public static synchronized SnakeUpdater get(Context context) { if(instance==null)instance=new SnakeUpdater(context); return instance; }
+    private boolean offline() { return SnakeRepository.get(app).offlineMode; }
+    void onEnterOffline() {
+        cancelled=true; prompted=true; pendingPermission=false; readyToInstall=false;
+        HttpURLConnection connection=activeConnection; if(connection!=null)connection.disconnect();
+        Thread running=worker; if(running!=null)running.interrupt(); dismissProgress();
+    }
     public boolean automatic() { return prefs.getBoolean("automatic",true); }
     public void setAutomatic(boolean value) { prefs.edit().putBoolean("automatic",value).apply(); if(!value)prompted=true; }
     public void onResume(LauncherActivity activity) {
@@ -59,7 +66,7 @@ public final class SnakeUpdater {
         main.post(() -> resume(activity));
     }
     private void resume(LauncherActivity activity) {
-        if(activity()!=activity)return;
+        if(activity()!=activity || offline())return;
         if(pendingPermission && app.getPackageManager().canRequestPackageInstalls()) { pendingPermission=false; install(); return; }
         if(downloading) { showProgress(); return; }
         if(readyToInstall && idle()) { readyToInstall=false; install(); return; }
@@ -69,23 +76,34 @@ public final class SnakeUpdater {
     }
     public void check(LauncherActivity activity, boolean manual) {
         host=new WeakReference<>(activity);
+        if(offline()) { if(manual)notice("Mode hors connexion","Reconnecte-toi pour rechercher une mise à jour du launcher."); return; }
         if(downloading) { showProgress(); return; }
         if(checking) { if(manual)Toast.makeText(activity,"Recherche déjà en cours…",Toast.LENGTH_SHORT).show(); return; }
         if(available!=null && manual) { prompted=false; showAvailable(); return; }
         checking=true; prefs.edit().putLong("last-check",System.currentTimeMillis()).apply();
         if(manual)Toast.makeText(activity,"Recherche des mises à jour…",Toast.LENGTH_SHORT).show();
         executor.execute(()-> {
+            worker=Thread.currentThread();
             try {
                 Optional<Candidate> result=findUpdate();
                 main.post(()-> {
-                    checking=false; available=result.orElse(null); prompted=false;
+                    checking=false; if(offline())return; available=result.orElse(null); prompted=false;
                     if(available!=null) { if(manual || automatic() && idle())showAvailable(); }
                     else if(manual)notice("Mises à jour","Aucune mise à jour compatible publiée pour cette édition du launcher.");
                 });
             } catch(Exception exception) {
-                main.post(()-> { checking=false; if(manual)notice("Mises à jour","Impossible de vérifier les mises à jour. Réessaie plus tard.\n"+message(exception)); });
-            }
+                main.post(()-> { checking=false; if(manual && !offline())requestError("Impossible de vérifier les mises à jour.\n"+message(exception)); });
+            } finally { worker=null; Thread.interrupted(); }
         });
+    }
+    private void requestError(String text) {
+        LauncherActivity value=activity(); if(value==null)return;
+        AlertDialog.Builder dialog=new AlertDialog.Builder(value).setTitle("Requête impossible").setMessage(text).setPositiveButton("Fermer",null);
+        if(SnakeRepository.get(app).session!=null && !SnakeRepository.get(app).busy && !Sn3GameBridge.isRunning(app))dialog.setNegativeButton("Passer hors connexion",(d,w)-> {
+            try { SnakeRepository.get(app).goOffline(); }
+            catch(Exception exception) { notice("Mode hors connexion indisponible",message(exception)); }
+        });
+        dialog.show();
     }
     private LauncherActivity activity() {
         LauncherActivity value=host.get();
@@ -95,7 +113,7 @@ public final class SnakeUpdater {
     private boolean idle() { return !SnakeRepository.get(app).busy && !Sn3GameBridge.isRunning(app); }
     private void notice(String title,String text) { LauncherActivity value=activity(); if(value!=null)new AlertDialog.Builder(value).setTitle(title).setMessage(text).setPositiveButton("OK",null).show(); }
     private void showAvailable() {
-        LauncherActivity value=activity(); Candidate update=available; if(value==null || update==null || !idle())return;
+        LauncherActivity value=activity(); Candidate update=available; if(value==null || update==null || !idle() || offline())return;
         prompted=true;
         String notes=update.releaseNotes()==null?"":update.releaseNotes(); if(notes.length()>1200)notes=notes.substring(0,1200)+"…";
         boolean ready=apk().isFile() && apk().length()==update.size();
@@ -127,14 +145,16 @@ public final class SnakeUpdater {
                 && uri.getPort()==-1 && uri.getRawUserInfo()==null && uri.getRawQuery()==null && uri.getRawFragment()==null
                 && uri.getRawPath().startsWith(REPOSITORY) && !uri.getRawPath().contains("%") && !uri.getRawPath().contains("..");
     }
-    private static HttpURLConnection open(URI start) throws IOException {
+    private HttpURLConnection open(URI start) throws IOException {
         URI uri=start;
         for(int redirects=0;redirects<=5;redirects++) {
+            if(offline() || Thread.currentThread().isInterrupted())throw new InterruptedIOException("Mode hors connexion");
             String host=uri.getHost();
             if(!"https".equalsIgnoreCase(uri.getScheme()) || uri.getRawUserInfo()!=null || uri.getPort()!=-1
                     || host==null || !Set.of("api.github.com","github.com","release-assets.githubusercontent.com","objects.githubusercontent.com","github-releases.githubusercontent.com").contains(host.toLowerCase(Locale.ROOT)))
                 throw new IOException("Redirection de mise à jour refusée");
-            HttpURLConnection connection=(HttpURLConnection)uri.toURL().openConnection();
+            HttpURLConnection connection=(HttpURLConnection)uri.toURL().openConnection(); activeConnection=connection;
+            if(offline()) { connection.disconnect(); throw new InterruptedIOException("Mode hors connexion"); }
             connection.setConnectTimeout(10000); connection.setReadTimeout(15000); connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("User-Agent","SnakeN3stLauncher-Android/"+BuildConfig.VERSION_NAME);
             connection.setRequestProperty("Accept",host.equals("api.github.com")?"application/vnd.github+json":"application/octet-stream");
@@ -150,7 +170,7 @@ public final class SnakeUpdater {
         }
         throw new IOException("Téléchargement indisponible");
     }
-    private static String readText(URI uri,int limit,boolean allow404) throws IOException {
+    private String readText(URI uri,int limit,boolean allow404) throws IOException {
         HttpURLConnection connection=open(uri);
         try {
             if(allow404 && connection.getResponseCode()==404)return null;
@@ -164,6 +184,7 @@ public final class SnakeUpdater {
         } finally { connection.disconnect(); }
     }
     private void download(Candidate update) {
+        if(offline()) { notice("Mode hors connexion","Reconnecte-toi avant de télécharger une mise à jour."); return; }
         if(downloading || !idle()) { notice("Mise à jour","Termine l’opération ou ferme Minecraft avant de mettre à jour le launcher."); return; }
         downloading=true; cancelled=false; percent=0; progressText="Préparation…"; showProgress();
         ProgressKeeper.submitProgress("sn3-update",0,R.string.sn3_update_start); ProgressService.startService(app);
@@ -196,7 +217,7 @@ public final class SnakeUpdater {
                 main.post(()-> { downloading=false; dismissProgress(); readyToInstall=true; if(activity()!=null) { readyToInstall=false; install(); } });
             } catch(Exception exception) {
                 boolean stopped=cancelled || exception instanceof InterruptedException || Thread.currentThread().isInterrupted();
-                main.post(()-> { downloading=false; dismissProgress(); if(!stopped)notice("Mise à jour impossible",message(exception)); });
+                main.post(()-> { downloading=false; dismissProgress(); if(!stopped && !offline())requestError(message(exception)); });
             } finally {
                 temporary.delete(); worker=null; Thread.interrupted(); ProgressKeeper.submitProgress("sn3-update",-1,-1);
             }
@@ -228,7 +249,7 @@ public final class SnakeUpdater {
     }
     private void install() {
         LauncherActivity value=activity(); Candidate update=available;
-        if(value==null || update==null)return;
+        if(value==null || update==null || offline())return;
         if(!idle()) { notice("Mise à jour prête","Ferme Minecraft et termine les opérations en cours, puis relance la mise à jour depuis ton compte."); return; }
         if(!app.getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(value).setTitle("Autoriser les mises à jour")

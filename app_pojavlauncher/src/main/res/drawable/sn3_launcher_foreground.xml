@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Official square SN logo; its original pixels/aspect ratio are unchanged. -->
-    <item android:width="64dp" android:height="64dp" android:gravity="center">
-        <bitmap android:src="@drawable/sn3_logo" android:gravity="fill" android:filter="true" />
-    </item>
-</layer-list>
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="20%">
+    <bitmap android:src="@drawable/sn3_logo" android:gravity="fill" android:filter="true" />
+</inset>

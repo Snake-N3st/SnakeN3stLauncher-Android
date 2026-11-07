@@ -41,7 +41,7 @@ public final class ModpackManagerFragment extends Fragment {
     private Path replacedFile;
     private TextView state, progressText, error;
     private ProgressBar progress;
-    private Button install, play;
+    private Button install, play, offline;
     private final List<View> mutationControls = new ArrayList<>();
     private record LocalMod(Path file, InstalledModInfo info, boolean managed, String project, android.graphics.Bitmap icon) { }
     private final Runnable observer = () -> {
@@ -95,13 +95,19 @@ public final class ModpackManagerFragment extends Fragment {
         state = view.findViewById(R.id.sn3_manager_state);
         progressText = view.findViewById(R.id.sn3_manager_progress_text); error = view.findViewById(R.id.sn3_manager_error);
         progress = view.findViewById(R.id.sn3_manager_progress); install = view.findViewById(R.id.sn3_manager_install); play = view.findViewById(R.id.sn3_manager_play);
+        offline = view.findViewById(R.id.sn3_manager_offline);
+        offline.setOnClickListener(v -> { try { repo.goOffline(); renderPage(); } catch(IllegalStateException failure) { error.setText(failure.getMessage()); error.setVisibility(View.VISIBLE); } });
         ModpackSummary summary = repo.packs.stream().filter(pack -> pack.slug().equals(slug)).findFirst().orElse(null);
         ((TextView)view.findViewById(R.id.sn3_manager_title)).setText(summary == null ? slug : summary.name());
         ((TextView)view.findViewById(R.id.sn3_manager_description)).setText(summary == null ? "Gérer l’installation et les mods de cette instance." : summary.description());
         ImageView icon = view.findViewById(R.id.sn3_manager_icon);
-        if (summary != null) SnakePackIcons.load(requireContext(), summary, repo.site(), drawable -> { if (ready() && drawable != null) icon.setImageDrawable(drawable); });
+        if (summary != null) {
+            java.util.function.Consumer<android.graphics.drawable.Drawable> apply = drawable -> { if(ready() && drawable!=null) icon.setImageDrawable(drawable); };
+            if(repo.localOnly(slug)) SnakePackIcons.loadLocal(requireContext(),summary,apply); else SnakePackIcons.load(requireContext(),summary,repo.site(),apply);
+        }
         install.setOnClickListener(v -> {
             if (repo.busy) repo.cancel();
+            else if(repo.localOnly(slug)) return;
             else if (repo.isInstalled(slug)) confirmRepair();
             else operation("Installation…", () -> Sn3GameBridge.install(host(), repo, slug));
         });
@@ -131,7 +137,7 @@ public final class ModpackManagerFragment extends Fragment {
         ProgressKeeper.addListener("sn3", progressListener);
         ProgressKeeper.addListener(com.kdt.mcgui.ProgressLayout.DOWNLOAD_MINECRAFT, minecraftProgressListener);
         updateState();
-        if (autoInstall) { autoInstall = false; operation("Installation du modpack…", () -> Sn3GameBridge.install(host(), repo, slug)); }
+        if (autoInstall && !repo.localOnly(slug)) { autoInstall = false; operation("Installation du modpack…", () -> Sn3GameBridge.install(host(), repo, slug)); }
     }
     @Override public void onPause() {
         repo.removeScreenObserver(observer); ProgressKeeper.removeListener("sn3", progressListener);
@@ -147,24 +153,25 @@ public final class ModpackManagerFragment extends Fragment {
         if (!ready()) return;
         boolean installed = !repo.busy && repo.isInstalled(slug);
         boolean running = Sn3GameBridge.isRunning(requireContext());
-        state.setText(repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
+        state.setText(repo.removedPacks.contains(slug)?"Retiré du site · lancement local uniquement":repo.offlineMode?"Hors connexion · fichiers locaux uniquement":repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
         install.setText(repo.busy ? "Annuler" : installed ? "Réparer" : "Installer");
-        install.setEnabled(!running); play.setVisibility(installed ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
+        install.setEnabled(!running && (repo.busy || !repo.localOnly(slug))); play.setVisibility(installed ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
+        offline.setVisibility(!repo.busy && repo.error != null && repo.session != null && repo.offlineAvailable && !repo.offlineMode ? View.VISIBLE : View.GONE);
         error.setText(repo.error); error.setVisibility(repo.error == null ? View.GONE : View.VISIBLE);
         if (!repo.busy) { progress.setVisibility(View.GONE); progressText.setVisibility(View.GONE); progressText.setText(""); }
-        for (View control : mutationControls) control.setEnabled(!repo.busy && !running);
+        for (View control : mutationControls) control.setEnabled(!repo.busy && !running && !(repo.localOnly(slug) && "sn3-online".equals(control.getTag())));
     }
     private void operation(String label, SnakeRepository.Work work) {
         if (repo.busy) return;
         if (Sn3GameBridge.isRunning(requireContext())) { error.setText("Ferme Minecraft avant de modifier cette instance."); error.setVisibility(View.VISIBLE); return; }
-        if (repo.session == null || repo.sessionRejected) { error.setText("Reviens au compte pour valider ta connexion avant de continuer."); error.setVisibility(View.VISIBLE); return; }
+        if (repo.session == null || repo.sessionRejected && !repo.offlineMode) { error.setText("Reviens au compte pour valider ta connexion avant de continuer."); error.setVisibility(View.VISIBLE); return; }
         repo.work(label, work);
     }
     private void showPage(int selected) { if (tabs.getCurrentTab() == selected) renderPage(); else tabs.setCurrentTab(selected); }
     private void renderPage() {
         if (!ready()) return;
         content.removeAllViews(); mutationControls.clear();
-        if (page == 0) instancePage(); else if (page == 1) modsPage(); else searchPage();
+        if (page == 0) instancePage(); else if (page == 1) modsPage(); else if(repo.localOnly(slug)) text("La recherche et les mises à jour de mods sont indisponibles hors connexion ou pour un modpack retiré du site.",16,false); else searchPage();
         updateState();
     }
     private TextView text(String value, int size, boolean bold) {
@@ -177,6 +184,7 @@ public final class ModpackManagerFragment extends Fragment {
         view.setTextSize(14); view.setMinHeight(dp(48));
         parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
         if (mutates) mutationControls.add(view);
+        if (label.equals("Versions") || label.equals("Canal de distribution") || label.equals("Version du modpack")) view.setTag("sn3-online");
         return view;
     }
     private void separator() {
@@ -305,12 +313,14 @@ public final class ModpackManagerFragment extends Fragment {
         }
     }
     private void search() {
+        if(repo.localOnly(slug)) return;
         operation("Recherche Modrinth…", () -> {
             List<ModrinthSearchHit> result = new ModrinthApiClient(repo.http).search(query, 20);
             onMain(() -> { hits = result; versions = null; showPage(2); });
         });
     }
     private void loadVersions(String project, String title) {
+        if(repo.localOnly(slug)) return;
         operation("Chargement des versions compatibles…", () -> {
             ModpackManifest manifest = repo.manifest(slug);
             List<ModrinthVersion> compatible = new ModrinthApiClient(repo.http).versions(project).stream()
@@ -334,7 +344,7 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private void chooseChannel() {
         operation("Chargement des canaux…", () -> {
-            var choices = repo.auth().fetchChannels(); String[] labels = new String[choices.size()+1]; labels[0] = "Canal par défaut du site";
+            repo.requireOnline(slug); var choices = repo.auth().fetchChannels(); String[] labels = new String[choices.size()+1]; labels[0] = "Canal par défaut du site";
             for (int index=0; index<choices.size(); index++) labels[index+1] = choices.get(index).name() + (choices.get(index).restricted() ? " · Restreint" : "");
             onMain(() -> new AlertDialog.Builder(requireContext()).setTitle("Canal de distribution").setItems(labels,(d,index) -> {
                 if (repo.busy) return;
@@ -345,7 +355,7 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private void choosePackVersion() {
         operation("Chargement des versions du pack…", () -> {
-            var choices = repo.api().listVersions(slug,repo.requireSession()); String[] labels = new String[choices.size()+1]; labels[0] = "Suivre le canal";
+            repo.requireOnline(slug); var choices = repo.api().listVersions(slug,repo.requireSession()); String[] labels = new String[choices.size()+1]; labels[0] = "Suivre le canal";
             for (int index=0; index<choices.size(); index++) labels[index+1] = choices.get(index).version();
             onMain(() -> new AlertDialog.Builder(requireContext()).setTitle("Version du modpack").setItems(labels,(d,index) -> {
                 if (repo.busy) return;
@@ -355,10 +365,11 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private void editAmethystProfile() {
         operation("Préparation du profil…", () -> {
-            ModpackManifest manifest = repo.manifest(slug); String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            ModpackManifest manifest = repo.localOnly(slug) ? null : repo.manifest(slug); String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
             mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.load();
             var profiles = mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.mainProfileJson.profiles;
             if (!profiles.containsKey(id)) {
+                if(manifest==null) throw new java.io.IOException("Profil local manquant. Reviens en ligne pour installer ce modpack.");
                 var profile = new mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile(); profile.name = "Snake N3st — "+slug;
                 profile.gameDir = repo.instance(slug).toString(); profile.lastVersionId = manifest.mcVersion(); profile.javaArgs = repo.settings(slug).extraJvmArgs(); SnakePackIcons.applyToProfile(requireContext(),slug,profile); profiles.put(id,profile);
                 mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.write();

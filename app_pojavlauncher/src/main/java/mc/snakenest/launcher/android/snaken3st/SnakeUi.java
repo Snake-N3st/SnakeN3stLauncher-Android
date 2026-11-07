@@ -73,24 +73,32 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void render() {
         if(isFinishing()||isDestroyed()) return;
-        ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.sessionRejected?"Revalider la session Snake N3st":repo.player==null?"Se connecter à Snake N3st":repo.player.username());
+        ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.offlineMode?offlineLabel():repo.sessionRejected?"Revalider la session Snake N3st":repo.player==null?"Se connecter à Snake N3st":repo.player.username());
         ModpackSummary pack=selected();
         var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
-        account.setAvatar(repo.player==null?null:repo.player.avatar(),repo.site());
+        account.setAvatar(repo.offlineMode || repo.player==null?null:repo.player.avatar(),repo.site());
+        menu.findViewById(R.id.news_button).setEnabled(!repo.offlineMode);
+        ((TextView)menu.findViewById(R.id.install_jar_button)).setText(repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
         var picker=(com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner);
+        picker.setLocalState(repo.offlineMode,repo.removedPacks);
         picker.submitPacks(repo.packs,pack==null?null:pack.slug(),repo.site(),chosen->{
             repo.prefs.edit().putString("selected-pack",chosen.slug()).apply(); render();
         });
-        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.sessionRejected?"Revalider":repo.session==null?"Se connecter":pack==null?"Choisir un modpack":repo.isInstalled(pack.slug())?"Jouer":"Installer");
+        ((TextView)menu.findViewById(R.id.play_button)).setText(repo.busy?"Annuler":Sn3GameBridge.isRunning(host)?"Arrêter Minecraft":repo.sessionRejected && !repo.offlineMode?"Revalider":repo.session==null?"Se connecter":pack==null?"Choisir un modpack":repo.isInstalled(pack.slug())?"Jouer":"Installer");
         if(repo.loginUrl!=null && !repo.loginUrl.equals(openedLogin)) { openedLogin=repo.loginUrl; open(openedLogin); }
-        if(repo.error!=null && !repo.error.equals(shownError)) { shownError=repo.error; notice("Opération impossible",repo.error); }
+        if(repo.error!=null && !repo.error.equals(shownError)) { shownError=repo.error; showFailure(repo.error); }
     }
     private void account() {
         repo.observer=observer;
+        if (repo.offlineMode) {
+            new AlertDialog.Builder(this).setTitle(offlineLabel()).setMessage("Les modpacks installés restent jouables avec la clé locale. Les téléchargements et mises à jour sont désactivés.")
+                .setNegativeButton("Fermer",null).setNeutralButton("Compte",(d,w)->panel("Compte Snake N3st",this::showSettings))
+                .setPositiveButton("Revenir en ligne",(d,w)->repo.work("Connexion au site…",repo::refresh)).show(); return;
+        }
         if (repo.sessionRejected) {
             new AlertDialog.Builder(this).setTitle("Revalider cet appareil")
                 .setMessage("La requête de session a été refusée. La clé est conservée ; vérifie aussi l’horloge de cet appareil.")
-                .setNeutralButton("Annuler",null)
+                .setNeutralButton("Passer hors connexion",(d,w)->enterOffline())
                 .setNegativeButton("Réessayer",(d,w)->repo.work("Validation de la session…",repo::refresh))
                 .setPositiveButton("Se reconnecter",(d,w)->idle(repo::login)).show();
             return;
@@ -108,14 +116,16 @@ public final class SnakeUi extends ContextWrapper {
                     repo.main.postDelayed(()->{ if(!Sn3GameBridge.isRunning(host)) repo.work("Protection des fichiers…",repo::sealAll); },1500);
                 }).show(); return;
         }
-        if(repo.session==null || repo.sessionRejected) { account(); return; }
+        if(repo.session==null || repo.sessionRejected && !repo.offlineMode) { account(); return; }
         ModpackSummary pack=selected();
         if(pack==null) { selectPack(); return; }
         if (repo.isInstalled(pack.slug())) repo.work("Préparation de " + pack.name() + "…", () -> Sn3GameBridge.launch(host, repo, pack.slug()));
+        else if(repo.localOnly(pack.slug())) notice("Installation indisponible","Ce modpack doit être installé en ligne avant de jouer hors connexion.");
         else ModpackManagerFragment.open(host, pack.slug(), true);
     }
     private void selectPack() {
-        if(repo.session==null || repo.sessionRejected) { account(); return; }
+        if(repo.session==null || repo.sessionRejected && !repo.offlineMode) { account(); return; }
+        if(repo.packs.isEmpty() && repo.offlineMode) { notice("Hors connexion","Aucun modpack installé disponible sur cet appareil."); return; }
         if(repo.packs.isEmpty()) { repo.work("Chargement des modpacks…",repo::refresh); return; }
         ((com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner)).showPicker();
     }
@@ -148,14 +158,17 @@ public final class SnakeUi extends ContextWrapper {
             button(content,"Lire l’article",() -> open(post.url()));
         }
     }
-    private void loadNews() { repo.work("Chargement des actualités…",() -> {
+    private void loadNews() { if(repo.offlineMode) { notice("Hors connexion","Les actualités sont indisponibles hors connexion."); return; } repo.work("Chargement des actualités…",() -> {
         repo.posts=new NewsApiClient(repo.http,URI.create(repo.site())).listPosts();
         runOnUiThread(()->panel("Actualités Snake N3st",this::showNews));
     }); }
     private void showSettings() {
         text("Compte et sécurité",22,Color.WHITE);
         text(repo.site(),14,Color.LTGRAY);
-        if (repo.player != null) { text(repo.player.username()+"\n"+repo.player.email(),16,Color.WHITE);
+        if (repo.session != null) { text(repo.player==null?offlineLabel():repo.player.username()+"\n"+repo.player.email(),16,Color.WHITE);
+            button(content,repo.offlineMode?"Revenir en ligne":"Passer hors connexion",() -> idle(() -> {
+                if(repo.offlineMode) repo.work("Reconnexion…",repo::refresh); else enterOffline();
+            }));
             if (!repo.pin.isEnabled()) button(content,"Protéger avec un PIN",() -> idle(() -> askPin(true)));
             else { text("Protection par PIN activée",16,Color.LTGRAY);
                 button(content,"Désactiver le PIN", () -> idle(() -> new AlertDialog.Builder(this).setTitle("Désactiver le PIN ?")
@@ -169,7 +182,7 @@ public final class SnakeUi extends ContextWrapper {
 
         button(content,"Éditeur des contrôles",() -> startActivity(new Intent(this,CustomControlsActivity.class)));
         button(content,"Signaler un bug",this::reportBug);
-        button(content,"Rechercher une mise à jour du launcher",() -> SnakeUpdater.get(host).check(host,true));
+        button(content,"Rechercher une mise à jour du launcher",() -> { if(repo.offlineMode) notice("Hors connexion","Les mises à jour sont indisponibles hors connexion."); else SnakeUpdater.get(host).check(host,true); });
         Switch automaticUpdates = new Switch(this); automaticUpdates.setText("Vérifier automatiquement les mises à jour");
         automaticUpdates.setChecked(SnakeUpdater.get(host).automatic());
         automaticUpdates.setOnCheckedChangeListener((view,enabled) -> SnakeUpdater.get(host).setAutomatic(enabled)); content.addView(automaticUpdates);
@@ -188,6 +201,7 @@ public final class SnakeUi extends ContextWrapper {
         }).show();
     }
     private void reportBug() {
+        if(repo.offlineMode) { notice("Hors connexion","L’envoi de rapports nécessite une connexion au site."); return; }
         LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20),0,dp(20),0);
         EditText summary=field(form,"Résumé","",android.text.InputType.TYPE_CLASS_TEXT);
         EditText description=field(form,"Comment reproduire le problème ?","",android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -199,6 +213,17 @@ public final class SnakeUi extends ContextWrapper {
                 if(!ok) throw new java.io.IOException("Le rapport n’a pas pu être envoyé.");
                 runOnUiThread(() -> notice("Rapport envoyé","Merci, le rapport a été reçu par le site."));
             })).show();
+    }
+    private String offlineLabel() {
+        try { return repo.cachedUsername()+" · Hors connexion"; } catch(Exception ignored) { return "Compte local · Hors connexion"; }
+    }
+    private void enterOffline() {
+        try { repo.goOffline(); } catch(Exception failure) { notice("Hors connexion indisponible",failure.getMessage()); }
+    }
+    private void showFailure(String message) {
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Opération impossible").setMessage(message).setPositiveButton("Fermer",null);
+        if(repo.session!=null && repo.offlineAvailable && !repo.offlineMode) dialog.setNeutralButton("Passer hors connexion",(d,w)->enterOffline());
+        dialog.show();
     }
     void notice(String title,String message) { if(!isFinishing()&&!isDestroyed()) new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK",null).show(); }
     private void open(String url) { try { Uri uri=Uri.parse(url); if(!"https".equals(uri.getScheme())) throw new IllegalArgumentException("Adresse HTTPS requise"); startActivity(new Intent(Intent.ACTION_VIEW,uri)); } catch(Exception e){ notice("Navigateur indisponible",e.getMessage()); } }

@@ -123,6 +123,18 @@ public final class SnakePackIcons {
         });
     }
 
+    /** Disk/RAM only: never starts or invalidates a remote download. */
+    public static void loadLocal(Context context, ModpackSummary pack, Consumer<Drawable> callback) {
+        Runnable read = () -> {
+            synchronized (SnakePackIcons.class) {
+                ensureLoaded(); Entry entry = ICONS.get(key(pack.slug()));
+                try { callback.accept(entry == null || entry.icon() == null ? null : ProfileIconCache.fetchIcon(context.getResources(),key(pack.slug()),entry.icon())); }
+                catch (RuntimeException ignored) { callback.accept(null); }
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) read.run(); else MAIN.post(read);
+    }
+
     /** Warms/invalidate icons after catalogue refresh, without creating game profiles. */
     public static void refresh(Context context, List<ModpackSummary> packs, String origin) {
         for (ModpackSummary pack : List.copyOf(packs)) load(context, pack, origin, ignored -> { });

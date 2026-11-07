@@ -23,6 +23,16 @@ import mc.snakenest.launcher.modpack.ModpackSummary;
 public final class mcModpackSpinner extends ExtendedTextView {
     private List<ModpackSummary> packs=List.of();
     private String selectedSlug;
+    private boolean localOnly;
+    private java.util.Set<String> removed = java.util.Set.of();
+    public void setLocalState(boolean offline, java.util.Set<String> removedSlugs) {
+        if (localOnly != offline || !removed.equals(removedSlugs)) selectedImage = null;
+        localOnly = offline; removed = java.util.Set.copyOf(removedSlugs); adapter.notifyDataSetChanged();
+    }
+    private void loadIcon(ModpackSummary pack, Consumer<Drawable> callback) {
+        if (localOnly || removed.contains(pack.slug())) SnakePackIcons.loadLocal(getContext(),pack,callback);
+        else SnakePackIcons.load(getContext(),pack,baseUrl,callback);
+    }
     private String baseUrl;
     private String selectedImage;
     private Consumer<ModpackSummary> onSelected;
@@ -49,13 +59,13 @@ public final class mcModpackSpinner extends ExtendedTextView {
         packs=List.copyOf(values); selectedSlug=slug; baseUrl=origin; onSelected=listener;
         ModpackSummary selected=null;
         for(ModpackSummary pack:packs) if(pack.slug().equals(slug)) { selected=pack; break; }
-        setText(selected==null?"Choisir un modpack Snake N3st":selected.name());
+        setText(selected==null?"Choisir un modpack Snake N3st":selected.name()+(removed.contains(selected.slug())?" · Retiré du site":""));
         String image=selected==null?null:selected.image();
         ModpackSummary selectedPack = selected;
         String imageKey=origin+"|"+slug+"|"+image+"|"+(selected==null?null:selected.latestVersion());
         if(!Objects.equals(selectedImage,imageKey)) {
             selectedImage=imageKey; setStartIcon(this,fallback());
-            if(selectedPack!=null) SnakePackIcons.load(getContext(),selectedPack,origin,icon->{
+            if(selectedPack!=null) loadIcon(selectedPack,icon->{
                 if(icon!=null && imageKey.equals(selectedImage)) setStartIcon(this,icon);
             });
         }
@@ -97,12 +107,12 @@ public final class mcModpackSpinner extends ExtendedTextView {
         @Override public View getView(int position,View recycled,ViewGroup parent) {
             ExtendedTextView row=recycled instanceof ExtendedTextView?(ExtendedTextView)recycled:
                 (ExtendedTextView)LayoutInflater.from(parent.getContext()).inflate(R.layout.item_version_profile_layout,parent,false);
-            ModpackSummary pack=getItem(position); row.setText(pack.name());
+            ModpackSummary pack=getItem(position); row.setText(pack.name()+(removed.contains(pack.slug())?" · Retiré du site":""));
             row.setBackgroundColor(pack.slug().equals(selectedSlug)?0x3CFFFFFF:Color.TRANSPARENT);
-            String key=baseUrl+"|"+pack.slug()+"|"+pack.image()+"|"+pack.latestVersion();
+            String key=localOnly+"|"+removed.contains(pack.slug())+"|"+baseUrl+"|"+pack.slug()+"|"+pack.image()+"|"+pack.latestVersion();
             if(!Objects.equals(row.getTag(R.id.sn3_image_url),key)) {
                 row.setTag(R.id.sn3_image_url,key); setStartIcon(row,fallback());
-                SnakePackIcons.load(getContext(),pack,baseUrl,icon->{
+                loadIcon(pack,icon->{
                     if(icon!=null && key.equals(row.getTag(R.id.sn3_image_url))) setStartIcon(row,icon);
                 });
             }

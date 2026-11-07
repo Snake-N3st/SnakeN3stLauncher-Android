@@ -17,6 +17,7 @@
   <TextView android:id="@+id/sn3_manager_progress_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:textSize="12sp" android:accessibilityLiveRegion="polite" />
   <ProgressBar android:id="@+id/sn3_manager_progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:max="100" android:visibility="gone" />
   <TextView android:id="@+id/sn3_manager_error" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:textColor="#FFAAAA" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+  <Button android:id="@+id/sn3_manager_offline" android:layout_width="match_parent" android:layout_height="48dp" android:text="Passer hors connexion" android:textAllCaps="false" android:visibility="gone" />
  </LinearLayout>
  <TabHost android:id="@+id/sn3_manager_tabs" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
   <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">

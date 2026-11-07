@@ -26,6 +26,12 @@ import java.util.function.Consumer;
 
 /** Bounded public-image loader. No cookies, credentials, disk cache or URL logging. */
 public final class RemoteIconLoader {
+    private static volatile boolean networkDisabled;
+    private static final java.util.Set<HttpURLConnection> CONNECTIONS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    static void setOffline(boolean offline) {
+        networkDisabled = offline;
+        if(offline) for(HttpURLConnection connection:CONNECTIONS) connection.disconnect();
+    }
     private static final int MAX_BYTES = 2 * 1024 * 1024;
     private static final int MAX_DIMENSION = 4096;
     private static final int DECODE_DIMENSION = 256;
@@ -50,6 +56,7 @@ public final class RemoteIconLoader {
     /** Always invokes callback on the main thread, with null when unavailable or rejected. */
     public static void load(Context context, String imageUrl, String baseUrl, Consumer<Drawable> callback) {
         Context application = context.getApplicationContext();
+        if(SnakeRepository.get(application).offlineMode) { MAIN.post(()->callback.accept(null)); return; }
         Consumer<Bitmap> deliver = bitmap -> MAIN.post(() -> callback.accept(bitmap == null ? null
                 : new BitmapDrawable(application.getResources(), bitmap)));
         final URI uri;
@@ -66,7 +73,7 @@ public final class RemoteIconLoader {
         try {
             WORKERS.execute(() -> {
                 Bitmap bitmap = null;
-                try { bitmap = download(uri); }
+                try { if(!SnakeRepository.get(application).offlineMode) bitmap = download(uri); }
                 catch (IOException | RuntimeException e) { /* Optional image: retain the placeholder. */ }
                 finish(key, bitmap);
             });
@@ -101,9 +108,13 @@ public final class RemoteIconLoader {
     }
 
     private static Bitmap download(URI start) throws IOException {
+        if(networkDisabled) return null;
         URI uri = start;
         for (int redirect = 0; redirect <= 3; redirect++) {
+            if(networkDisabled) return null;
             HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
+            CONNECTIONS.add(connection);
+            if(networkDisabled) { CONNECTIONS.remove(connection); connection.disconnect(); return null; }
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
             connection.setInstanceFollowRedirects(false);
@@ -122,7 +133,7 @@ public final class RemoteIconLoader {
                 try (InputStream input = connection.getInputStream()) {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = input.read(buffer)) != -1) {
-                        if (Thread.currentThread().isInterrupted()) return null;
+                        if (networkDisabled || Thread.currentThread().isInterrupted()) return null;
                         if (bytes.size() + count > MAX_BYTES) return null;
                         bytes.write(buffer, 0, count);
                     }
@@ -137,7 +148,7 @@ public final class RemoteIconLoader {
                 while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > DECODE_DIMENSION)
                     options.inSampleSize *= 2;
                 return BitmapFactory.decodeByteArray(encoded, 0, encoded.length, options);
-            } finally { connection.disconnect(); }
+            } finally { CONNECTIONS.remove(connection); connection.disconnect(); }
         }
         return null;
     }

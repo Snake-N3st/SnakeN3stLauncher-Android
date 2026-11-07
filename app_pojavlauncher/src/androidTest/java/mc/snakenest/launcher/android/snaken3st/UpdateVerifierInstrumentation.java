@@ -18,13 +18,16 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private static final String URL = "https://github.com/Snake-N3st/SnakeN3stLauncher-Android/releases/download/instrumentation/fixture.apk";
     private static final String PLACEHOLDER_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
+    private boolean offlineChecks;
     @Override public void onCreate(Bundle arguments) {
+        offlineChecks=arguments!=null && "true".equals(arguments.getString("offline"));
         super.onCreate(arguments);
         start();
     }
 
     @Override public void onStart() {
         super.onStart();
+        if(offlineChecks) { new OfflineLaunchChecks(this).run(); return; }
         Bundle result = new Bundle();
         int passed = 0;
         StringBuilder failures = new StringBuilder();

@@ -47,11 +47,19 @@ public final class Sn3GameBridge {
     }
 
     static void launch(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
-        PreparedLaunch prepared = prepare(activity, r, slug, false);
+        PreparedLaunch prepared = r.localOnly(slug) ? prepareLocal(activity, r, slug) : prepare(activity, r, slug, false);
         if (prepared == null) return;
         String version = prepared.version();
         ModpackSettings settings = prepared.settings();
-        if (r.pinKey != null) SensitiveFileVault.decryptAll(r.instance(slug), r.pinKey);
+        if (r.pinKey != null) {
+            SensitiveFileVault.decryptAll(r.instance(slug), r.pinKey);
+            try (var files = Files.walk(r.instance(slug))) {
+                if(files.anyMatch(path -> path.getFileName().toString().endsWith(".sn3enc"))) {
+                    r.sealAll();
+                    throw new IOException("Un fichier protégé n’a pas pu être déchiffré. Le jeu n’a pas été lancé et les fichiers restent protégés.");
+                }
+            }
+        }
         Intent game = new Intent(activity, MainActivity.class);
         game.putExtra(MainActivity.INTENT_MINECRAFT_VERSION, version);
         game.putExtra(SEED, r.session.key().seed()); game.putExtra(MEMORY, settings.memoryMb());
@@ -65,11 +73,12 @@ public final class Sn3GameBridge {
     }
     private static PreparedLaunch prepare(LauncherActivity activity, SnakeRepository r, String slug, boolean repair) throws Exception {
         if (isRunning(activity)) throw new IllegalStateException("Un jeu est déjà en cours. Ferme-le avant de modifier une instance.");
-        r.beginInstallation(slug);
+        r.requireOnline(slug);
         ModpackManifest m = r.sync(slug, repair);
         r.status = "Vérification des mods…"; r.changed(); r.checkBlacklist(slug);
         String username = r.auth().fetchUsername(r.requireSession());
         if (!username.matches("[A-Za-z0-9_]{1,16}")) throw new IllegalStateException("Pseudo Minecraft invalide.");
+        r.catalog.cacheUsername(r.requireSession().playerId(), username);
         String version = prepareLoader(activity, r, m);
         if (version == null) return null;
         String json = DownloadUtils.downloadString(LauncherPreferences.PREF_VERSION_REPOS);
@@ -100,7 +109,69 @@ public final class Sn3GameBridge {
                 R.string.sn3_install_minecraft);
         new MinecraftDownloader().installSnakeVersion(activity, metadata, version);
         r.markInstalled(slug, version);
+        r.catalog.saveManifest(slug, m);
         return new PreparedLaunch(version, settings);
+    }
+
+    /** No authentication, synchronization, metadata lookup or downloader is reachable here. */
+    private static PreparedLaunch prepareLocal(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
+        if (isRunning(activity)) throw new IOException("Un jeu est déjà en cours.");
+        r.requireSession();
+        if (r.pin.isEnabled() && r.pinKey == null) throw new IOException("Déverrouille le PIN avant de jouer hors connexion.");
+        if (!r.isInstalled(slug)) throw new IOException("Installation locale incomplète. Reviens en ligne pour installer ou réparer ce modpack.");
+        LocalInstallationFiles.requireInstance(r.instance(slug), new LocalManifestStore().load(r.instance(slug))
+                .orElseThrow(() -> new IOException("Inventaire local manquant.")), r.modChoices(slug));
+        MinecraftProfile profile = r.localProfile(slug);
+        String version = profile.lastVersionId;
+        JMinecraftVersionList.Version info;
+        try { info = Tools.getVersionInfo(version); }
+        catch (RuntimeException e) { throw new IOException("Métadonnées Minecraft locales manquantes. Reviens en ligne pour réparer.", e); }
+        requireLocalFile(Paths.get(Tools.getClientClasspath(version)), "fichier du jeu");
+        if (info.libraries != null) for (var library : info.libraries) {
+            if(library.name.startsWith("org.lwjgl") || library.downloads != null && library.downloads.artifact == null) continue;
+            if (localLibraryApplies(library.rules)) LocalInstallationFiles.requireFile(Paths.get(Tools.DIR_HOME_LIBRARY),Tools.artifactToPath(library),false);
+        }
+        int javaVersion = info.javaVersion == null ? 8 : info.javaVersion.majorVersion;
+        String runtime;
+        try { runtime = Tools.pickRuntime(profile, javaVersion); }
+        catch (RuntimeException e) { throw new IOException("Runtime Java local manquant. Reviens en ligne pour terminer l’installation.", e); }
+        Path runtimeRoot = mc.snakenest.launcher.android.multirt.MultiRTUtils.getRuntimeHome(runtime).toPath();
+        boolean hasVm;
+        try (var files = Files.walk(runtimeRoot, 5)) { hasVm = files.anyMatch(path -> path.getFileName().toString().equals("libjvm.so") && Files.isRegularFile(path)); }
+        if (!hasVm) throw new IOException("Runtime Java local incomplet. Reviens en ligne pour terminer l’installation.");
+        if (info.assetIndex != null) {
+            if(info.assetIndex.id==null || !info.assetIndex.id.matches("[A-Za-z0-9_.+-]+")) throw new IOException("Index local invalide.");
+            Path index = Paths.get(Tools.ASSETS_PATH,"indexes",info.assetIndex.id+".json");
+            requireLocalFile(index,"index des ressources");
+            var objects = com.google.gson.JsonParser.parseString(Files.readString(index)).getAsJsonObject().getAsJsonObject("objects");
+            for (var entry : objects.entrySet()) {
+                String hash = entry.getValue().getAsJsonObject().get("hash").getAsString();
+                if (!hash.matches("[a-fA-F0-9]{40}")) throw new IOException("Index de ressources local invalide.");
+                requireLocalFile(Paths.get(Tools.ASSETS_PATH,"objects",hash.substring(0,2),hash),"ressource "+entry.getKey());
+            }
+        }
+        // Existing accounts are reused verbatim, including the offline UUID used by worlds.
+        String alias = "sn3-" + r.requireSession().playerId();
+        MinecraftAccount account = MinecraftAccount.load(alias);
+        if (account == null) {
+            account = new MinecraftAccount(); account.username = r.cachedUsername();
+            account.profileId = UUID.nameUUIDFromBytes(("OfflinePlayer:"+account.username).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            account.save(new File(Tools.DIR_ACCOUNT_NEW, alias+".json").toString());
+        } else if (!account.isLocal() || !account.username.equals(r.cachedUsername())) throw new IOException("Compte Minecraft local incohérent. Reviens en ligne pour le réparer.");
+        String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        LauncherProfiles.load();
+        LauncherPreferences.DEFAULT_PREF.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();
+        PojavProfile.setCurrentProfile(activity,alias);
+        return new PreparedLaunch(version,r.settings(slug));
+    }
+    private static boolean localLibraryApplies(JMinecraftVersionList.Arguments.ArgValue.ArgRules[] rules) {
+        if (rules != null) for (var rule : rules)
+            if ("allow".equals(rule.action) && rule.os != null && "osx".equals(rule.os.name)) return false;
+        return true;
+    }
+    private static void requireLocalFile(Path file, String label) throws IOException {
+        if (!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS) || Files.size(file)==0)
+            throw new IOException("Fichier local manquant ("+label+"). Reviens en ligne pour réparer ; aucun téléchargement n’a été lancé.");
     }
 
     private static String prepareLoader(LauncherActivity activity, SnakeRepository r, ModpackManifest m) throws Exception {
