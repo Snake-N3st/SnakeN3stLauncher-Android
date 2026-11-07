@@ -53,6 +53,9 @@ public class MinecraftDownloader {
     private AtomicLong mProcessedFileCounter;
     private AtomicLong mProcessedSizeCounter; // Total bytes of processed files (passed SHA1 or downloaded)
     private AtomicLong mInternetUsageCounter; // How many bytes downloaded over Internet
+    private final java.util.Set<String> mScheduledTargets = new java.util.HashSet<>();
+    private final java.util.Set<String> mMetadataVersions = new java.util.HashSet<>();
+    private JMinecraftVersionList.Version mRuntimeVersion;
     private long mTotalFileCount;
     private long mTotalSize;
     private File mSourceJarFile; // The source client JAR picked during the inheritance process
@@ -66,7 +69,7 @@ public class MinecraftDownloader {
 
     /**
      * Start the game version download process on the global executor service.
-     * @param activity Activity, used for automatic installation of JRE 17 if needed
+     * @param activity Activity, used to install the required Java runtime on demand
      * @param version The JMinecraftVersionList.Version from the version list, if available
      * @param realVersion The version ID (necessary)
      * @param listener The download status listener
@@ -120,7 +123,7 @@ public class MinecraftDownloader {
 
     /**
      * Download the game version.
-     * @param activity Activity, used for automatic installation of JRE 17 if needed
+     * @param activity Activity, used to install the required Java runtime on demand
      * @param verInfo The JMinecraftVersionList.Version from the version list, if available
      * @param versionName The version ID (necessary)
      * @throws Exception when an exception occurs in the function body or in any of the downloading threads.
@@ -148,41 +151,22 @@ public class MinecraftDownloader {
             mInternetUsageCounter = new AtomicLong(0);
             mDownloaderThreadException = new AtomicReference<>(null);
             mUseFileCounter = false;
+            mTotalFileCount=0; mTotalSize=0; mScheduledTargets.clear(); mMetadataVersions.clear(); mRuntimeVersion=null; mSourceJarFile=null;
 
             downloadAndProcessMetadata(activity, verInfo, versionName);
 
-            ArrayBlockingQueue<Runnable> taskQueue =
-                    new ArrayBlockingQueue<>(mScheduledDownloadTasks.size(), false);
-            ThreadPoolExecutor downloaderPool =
-                    new ThreadPoolExecutor(4, 4, 500, TimeUnit.MILLISECONDS, taskQueue);
+            java.util.List<mc.snakenest.launcher.util.ParallelDownloadBatch.Work> jobs=new ArrayList<>();
+            if(activity!=null && mRuntimeVersion!=null) jobs.add(()->NewJREUtil.installNewJreIfNeeded(activity,mRuntimeVersion));
+            for(DownloaderTask task:mScheduledDownloadTasks) jobs.add(task::runCatching);
+            int transfers=8;
+            try {transfers=Integer.parseInt(LauncherPreferences.DEFAULT_PREF.getString("sn3.downloadThreads","8"));}catch(NumberFormatException ignored){}
+            mc.snakenest.launcher.util.ParallelDownloadBatch.run(jobs,Math.max(2,Math.min(16,transfers)),()->{
+                double speed=speedCalculator.feed(mInternetUsageCounter.get())/ONE_MEGABYTE;
+                if(mUseFileCounter)reportProgressFileCounter(speed);else reportProgressSizeCounter(speed);
+            });
+            ensureJarFileCopy();
+            extractNatives(versionName);
 
-            // I have tried pre-filling the queue directly instead of doing this, but it didn't work.
-            // What a shame.
-            for(DownloaderTask scheduledTask : mScheduledDownloadTasks) downloaderPool.execute(scheduledTask);
-            downloaderPool.shutdown();
-
-            try {
-                while (mDownloaderThreadException.get() == null &&
-                        !downloaderPool.awaitTermination(33, TimeUnit.MILLISECONDS)) {
-                    double speed = speedCalculator.feed(mInternetUsageCounter.get()) / ONE_MEGABYTE;
-                    if(mUseFileCounter) reportProgressFileCounter(speed);
-                    else reportProgressSizeCounter(speed);
-                }
-                Exception thrownException = mDownloaderThreadException.get();
-                if(thrownException != null) {
-                    throw thrownException;
-                } else {
-                    ensureJarFileCopy();
-                    extractNatives(versionName);
-                }
-            }catch (InterruptedException e) {
-                // Interrupted while waiting, which means that the download was cancelled.
-                // Kill all downloading threads immediately, and ignore any exceptions thrown by them
-                downloaderPool.shutdownNow();
-                throw e;
-            } finally {
-                downloaderPool.shutdownNow();
-            }
         } finally {
             ProgressLayout.clearProgress(ProgressLayout.DOWNLOAD_MINECRAFT);
         }
@@ -190,7 +174,7 @@ public class MinecraftDownloader {
 
     private void reportProgressFileCounter(double speed) {
         long dlFileCounter = mProcessedFileCounter.get();
-        int progress = (int)((dlFileCounter * 100L) / mTotalFileCount);
+        int progress = mTotalFileCount==0?0:(int)Math.min(99,(dlFileCounter * 100L) / mTotalFileCount);
         ProgressLayout.setProgress(ProgressLayout.DOWNLOAD_MINECRAFT, progress,
                 R.string.newdl_downloading_game_files, dlFileCounter,
                 mTotalFileCount, speed);
@@ -200,7 +184,7 @@ public class MinecraftDownloader {
         long dlFileSize = mProcessedSizeCounter.get();
         double dlSizeMegabytes = (double) dlFileSize / ONE_MEGABYTE;
         double dlTotalMegabytes = (double) mTotalSize / ONE_MEGABYTE;
-        int progress = (int)((dlFileSize * 100L) / mTotalSize);
+        int progress = mTotalSize==0?0:(int)Math.min(99,(dlFileSize * 100L) / mTotalSize);
         ProgressLayout.setProgress(ProgressLayout.DOWNLOAD_MINECRAFT, progress,
                 R.string.newdl_downloading_game_files_size, dlSizeMegabytes, dlTotalMegabytes, speed);
     }
@@ -228,6 +212,8 @@ public class MinecraftDownloader {
     }
 
     private void extractNatives(String versionName) throws IOException {
+        // Android-specific AARs are optional when the repository has no such artifact.
+        mDeclaredNatives.removeIf(file->!file.isFile());
         if(mDeclaredNatives.isEmpty()) return;
         int totalCount = mDeclaredNatives.size();
 
@@ -288,13 +274,14 @@ public class MinecraftDownloader {
     /**
      * Download (if necessary) and process a version's metadata, scheduling all downloads that this
      * version needs.
-     * @param activity Activity, used for automatic installation of JRE 17 if needed
+     * @param activity Activity, used to install the required Java runtime on demand
      * @param verInfo The JMinecraftVersionList.Version from the version list, if available
      * @param versionName The version ID (necessary)
-     * @return false if JRE17 installation failed, true otherwise
+     * @return whether required runtime preparation succeeded
      * @throws IOException if the download of any of the metadata files fails
      */
     private boolean downloadAndProcessMetadata(Activity activity, JMinecraftVersionList.Version verInfo, String versionName) throws IOException, MirrorTamperedException {
+        if(!mMetadataVersions.add(versionName))throw new IOException("Cyclic version inheritance: "+versionName);
         File versionJsonFile;
         if(verInfo != null) versionJsonFile = downloadGameJson(verInfo);
         else versionJsonFile = createGameJsonPath(versionName);
@@ -304,9 +291,8 @@ public class MinecraftDownloader {
             throw new IOException("Unable to read Version JSON for version " + versionName);
         }
 
-        if(activity != null && !NewJREUtil.installNewJreIfNeeded(activity, verInfo)){
-            throw new RuntimeException(activity.getString(R.string.exception_failed_to_unpack_jre17));
-        }
+        int required=verInfo.javaVersion==null?8:verInfo.javaVersion.majorVersion;
+        if(mRuntimeVersion==null || required>(mRuntimeVersion.javaVersion==null?8:mRuntimeVersion.javaVersion.majorVersion)) mRuntimeVersion=verInfo;
 
         JAssets assets = downloadAssetsIndex(verInfo);
         if(assets != null) scheduleAssetDownloads(assets);
@@ -322,8 +308,9 @@ public class MinecraftDownloader {
         if(Tools.isValidString(verInfo.inheritsFrom)) {
             JMinecraftVersionList.Version inheritedVersion = AsyncMinecraftDownloader.getListedVersion(verInfo.inheritsFrom);
             // Infinite inheritance !?! :noway:
-            return downloadAndProcessMetadata(activity, inheritedVersion, verInfo.inheritsFrom);
+            if(!downloadAndProcessMetadata(activity, inheritedVersion, verInfo.inheritsFrom)) return false;
         }
+
         return true;
     }
 
@@ -333,21 +320,11 @@ public class MinecraftDownloader {
 
     private void scheduleDownload(File targetFile, int downloadClass, String url, String sha1,
                                   long size, boolean skipIfFailed) throws IOException {
+        if(!mScheduledTargets.add(targetFile.getCanonicalPath()))return;
         FileUtils.ensureParentDirectory(targetFile);
         mTotalFileCount++;
-        // Only attempt to check size if we still use the size counter and didn't switch to file counter.
-        if(size <= 0 && !mUseFileCounter) {
-            size = DownloadMirror.getContentLengthMirrored(downloadClass, url);
-        }
-        if(size < 0) {
-            // If we were unable to get the content length ourselves, we automatically fall back
-            // to tracking the progress using the file counter.
-            size = 0;
-            mUseFileCounter = true;
-            Log.i("MinecraftDownloader", "Failed to determine size of "+targetFile.getName()+", switching to file counter");
-        }else {
-            mTotalSize += size;
-        }
+        // Missing sizes must never block scheduling on a serial HEAD request.
+        if(size<=0) {size=0;mUseFileCounter=true;} else mTotalSize+=size;
         mScheduledDownloadTasks.add(
                 new DownloaderTask(targetFile, downloadClass, url, sha1, size, skipIfFailed)
         );
@@ -399,7 +376,7 @@ public class MinecraftDownloader {
                 url = (dependentLibrary.url == null
                         ? "https://libraries.minecraft.net/"
                         : dependentLibrary.url.replace("http://","https://")) + libArtifactPath;
-                skipIfFailed = true;
+                skipIfFailed = false;
             }
             if(!LauncherPreferences.PREF_CHECK_LIBRARY_SHA) sha1 = null;
             scheduleDownload(new File(Tools.DIR_HOME_LIBRARY, libArtifactPath),
@@ -568,10 +545,12 @@ public class MinecraftDownloader {
         }
 
         private void runCatching() throws Exception {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             if(mDownloadClass == DownloadMirror.DOWNLOAD_CLASS_LIBRARIES && !Tools.isValidString(mTargetSha1)) {
                 // If we're downloading a library, try to get sha1 since it might be available as a file
                 tryGetLibrarySha1();
             }
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             if(Tools.isValidString(mTargetSha1)) {
                 verifyFileSha1();
             }else {
@@ -595,12 +574,17 @@ public class MinecraftDownloader {
         private void downloadFile() throws Exception {
             try {
                 DownloadUtils.ensureSha1(mTargetPath, mTargetSha1, () -> {
-                    DownloadMirror.downloadFileMirrored(mDownloadClass, mTargetUrl, mTargetPath,
-                            getLocalBuffer(), this);
+                    java.nio.file.Path part=java.nio.file.Files.createTempFile(mTargetPath.getAbsoluteFile().getParentFile().toPath(),".sn3-verified-",".part");
+                    try {
+                        DownloadMirror.downloadFileMirrored(mDownloadClass,mTargetUrl,part.toFile(),getLocalBuffer(),this);
+                        if(mTargetSha1!=null && !Tools.compareSHA1(part.toFile(),mTargetSha1))throw new DownloadUtils.SHA1VerificationException("Downloaded file hash mismatch");
+                        if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("Download cancelled");
+                        java.nio.file.Files.move(part,mTargetPath.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING,java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                    } finally {java.nio.file.Files.deleteIfExists(part);}
                     return null;
                 });
             }catch (Exception e) {
-                if(!mSkipIfFailed) throw e;
+                if(!mSkipIfFailed || !(e instanceof FileNotFoundException) || Thread.currentThread().isInterrupted()) throw e;
             }
             mProcessedFileCounter.incrementAndGet();
         }
@@ -614,7 +598,7 @@ public class MinecraftDownloader {
         public void updateProgress(int curr, int max) {
             int delta = curr - mLastCurr;
             mProcessedSizeCounter.addAndGet(delta);
-            mInternetUsageCounter.addAndGet(delta);
+            mInternetUsageCounter.addAndGet(Math.max(0,delta));
             mLastCurr = curr;
         }
     }

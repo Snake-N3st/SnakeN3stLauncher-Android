@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 
 import mc.snakenest.launcher.android.lifecycle.ContextExecutor;
 import mc.snakenest.launcher.android.prefs.LauncherPreferences;
-import mc.snakenest.launcher.android.tasks.AsyncAssetManager;
 import mc.snakenest.launcher.android.utils.*;
 import mc.snakenest.launcher.android.utils.FileUtils;
 
@@ -75,7 +74,6 @@ public class PojavApplication extends Application {
 												originalJNIDirectory.lastIndexOf("/"))
 												.concat("/x86");
 			}
-			AsyncAssetManager.unpackRuntime(getAssets());
 		} catch (Throwable throwable) {
 			Intent ferrorIntent = new Intent(this, FatalErrorActivity.class);
 			ferrorIntent.putExtra("throwable", throwable);

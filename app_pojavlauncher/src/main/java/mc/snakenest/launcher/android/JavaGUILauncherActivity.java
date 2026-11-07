@@ -205,14 +205,8 @@ public class JavaGUILauncherActivity extends BaseActivity implements View.OnTouc
             finalErrorDialog(getString(R.string.execute_jar_failed_to_read_file));
             return null;
         }
-        String nearestRuntime = MultiRTUtils.getNearestJreName(javaVersion);
-        if(nearestRuntime == null) {
-            finalErrorDialog(getString(R.string.multirt_nocompatiblert, javaVersion));
-            return null;
-        }
-        Runtime selectedRuntime = MultiRTUtils.forceReread(nearestRuntime);
-        int selectedJavaVersion = Math.max(javaVersion, selectedRuntime.javaVersion);
-        return selectedRuntime;
+        try { return NewJREUtil.ensureRuntime(this,javaVersion,LauncherPreferences.PREF_DEFAULT_RUNTIME); }
+        catch(RuntimeException failure) { finalErrorDialog(failure.getMessage()); return null; }
     }
 
     private File findModPath(List<String> argList) {
@@ -242,6 +236,10 @@ public class JavaGUILauncherActivity extends BaseActivity implements View.OnTouc
             if(selectedMod == null || DEFAULT_PREF.getBoolean("disable_autojre_select", false)) {
                 // If we are unable to find out the path to the mod or the user explicitly desires so, we use the default runtime
                 selectedRuntime = MultiRTUtils.forceReread(LauncherPreferences.PREF_DEFAULT_RUNTIME);
+                if(selectedRuntime.versionString==null) {
+                    finalErrorDialog(getString(R.string.multirt_nocompatiblert,8));
+                    return;
+                }
             }else {
                 // Autoselect it properly in the other case.
                 selectedRuntime = selectRuntime(selectedMod);

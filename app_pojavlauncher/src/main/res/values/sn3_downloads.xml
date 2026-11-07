@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sn3_download_threads_title">Simultaneous game downloads</string>
+    <string name="sn3_download_threads_summary">Maximum Minecraft file transfers: 8 by default. Modpack batch downloads are managed separately.</string>
+    <string-array name="sn3_download_thread_labels"><item>2</item><item>4</item><item>8</item><item>12</item><item>16</item></string-array>
+    <string-array name="sn3_download_thread_values"><item>2</item><item>4</item><item>8</item><item>12</item><item>16</item></string-array>
+</resources>

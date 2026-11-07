@@ -23,6 +23,8 @@ public final class SnakeUi extends ContextWrapper {
     private String openedLogin;
     private String shownError;
     private boolean restoreAttempted;
+    private boolean resumed;
+    private boolean loginScheduled;
     private AlertDialog accountDialog;
     private final Runnable observer = this::render;
     public SnakeUi(LauncherActivity host, View menu) {
@@ -54,13 +56,25 @@ public final class SnakeUi extends ContextWrapper {
     public void onResume() {
         View accountButton=host.findViewById(R.id.sn3_account_button);
         accountButton.setPressed(false); accountButton.jumpDrawablesToCurrentState();
-        repo.observer=observer; render();
-        SnakeUpdater.get(host).onResume(host);
+        resumed=true; repo.observer=observer;
         if(!restoreAttempted && repo.session==null && repo.store.exists() && !repo.busy) {
-            restoreAttempted=true; if(repo.pin.isEnabled()) askPin(false); else repo.unlock(new char[0]);
+            restoreAttempted=true;
+            if(!repo.pin.isEnabled()) repo.unlock(new char[0]);
         } else if(repo.session!=null && repo.pinKey!=null && !repo.busy && !Sn3GameBridge.isRunning(host)) repo.work("Protection des fichiers…",repo::sealAll);
+        render(); SnakeUpdater.get(host).onResume(host);
     }
-    public void onPause() { if(repo.observer==observer) repo.observer=null; }
+    public void onPause() { resumed=false; if(repo.observer==observer) repo.observer=null; }
+    static boolean needsSignIn(boolean hasSession,boolean hasSavedSession,boolean restorationAttempted,boolean busy) {
+        return !hasSession&&!busy&&(!hasSavedSession||restorationAttempted);
+    }
+    private void showLogin() {
+        if(loginScheduled||host.getSupportFragmentManager().isStateSaved())return;
+        loginScheduled=true;
+        menu.post(()->{
+            loginScheduled=false;
+            if(resumed&&needsSignIn(repo.session!=null,repo.store.exists(),restoreAttempted,repo.busy)&&!Sn3GameBridge.isRunning(host))Sn3LoginFragment.open(host);
+        });
+    }
     private void runOnUiThread(Runnable r) { host.runOnUiThread(r); }
     private boolean isFinishing() { return host.isFinishing(); }
     private boolean isDestroyed() { return host.isDestroyed(); }
@@ -71,6 +85,7 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void render() {
         if(isFinishing()||isDestroyed()) return;
+        if(resumed&&needsSignIn(repo.session!=null,repo.store.exists(),restoreAttempted,repo.busy)) { showLogin(); return; }
         ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.offlineMode?offlineLabel():repo.sessionRejected?"Revalider la session Snake N3st":repo.player==null?"Se connecter à Snake N3st":repo.player.username());
         ModpackSummary pack=selected();
         var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
@@ -88,9 +103,8 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void account() {
         repo.observer=observer;
-        if(repo.session==null) {
-            if(repo.pin.isEnabled() && repo.pinKey==null) askPin(false); else idle(repo::login);
-        } else panel("Compte Snake N3st",this::showSettings);
+        if(repo.session==null) Sn3LoginFragment.open(host);
+        else panel("Compte Snake N3st",this::showSettings);
     }
     private void play() {
         if(repo.busy) { repo.cancel(); return; }

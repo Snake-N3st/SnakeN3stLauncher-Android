@@ -29,15 +29,6 @@ public class AsyncAssetManager {
 
     private AsyncAssetManager(){}
 
-    /** Install the bundled Java 21 without changing any existing runtime or profile selection. */
-    public static void unpackRuntime(AssetManager am) {
-        sExecutorService.execute(() -> {
-            if (!mc.snakenest.launcher.android.NewJREUtil.ensureBundledRuntime(am)) {
-                Log.e("JREAuto", "Bundled Java 21 could not be prepared");
-            }
-        });
-    }
-
     /** Unpack single files, with no regard to version tracking */
     public static void unpackSingleFiles(Context ctx){
         ProgressLayout.setProgress(ProgressLayout.EXTRACT_SINGLE_FILES, 0);

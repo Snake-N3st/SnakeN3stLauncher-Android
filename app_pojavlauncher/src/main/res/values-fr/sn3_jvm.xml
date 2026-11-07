@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sn3_global_memory_title">Allocation de mémoire par défaut</string>
+    <string name="sn3_global_memory_summary">Valeur utilisée par les modpacks qui suivent les réglages globaux. Chaque modpack peut choisir sa propre allocation.</string>
+    <string name="sn3_global_arguments_title">Arguments JVM par défaut</string>
+    <string name="sn3_global_arguments_summary">Utilisés sauf si un profil ou un modpack possède ses propres arguments. La mémoire se règle avec son allocation, pas avec -Xmx ou -Xms.</string>
+    <string name="sn3_managed_arguments_title">Arguments JVM — gérés par le modpack</string>
+    <string name="sn3_managed_arguments_hint">À modifier dans les réglages Java du modpack.</string>
+</resources>

@@ -1,44 +1,37 @@
 package mc.snakenest.launcher.android.tasks;
 
-/**
- * A simple class to calculate the average Internet speed using a simple moving average.
- */
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.function.LongSupplier;
+
+/** Moving-average bytes/second from a monotonic clock, including consecutive same-tick updates. */
 public class SpeedCalculator {
-    private long mLastMillis;
-    private long mLastBytes;
-    private int mIndex;
-    private final double[] mPreviousInputs;
-    private double mSum;
+    private final LongSupplier clock;
+    private final double[] samples;
+    private long lastNanos,lastBytes;
+    private int index,count;
+    private double sum;
 
-    public SpeedCalculator() {
-        this(64);
+    public SpeedCalculator(){this(64);}
+    public SpeedCalculator(int depth){this(depth,System::nanoTime);}
+    /** Injectable monotonic clock for deterministic transfer tests. */
+    public SpeedCalculator(int depth,LongSupplier clock) {
+        if(depth<1)throw new IllegalArgumentException("Average depth must be positive");
+        this.clock=Objects.requireNonNull(clock);samples=new double[depth];lastNanos=clock.getAsLong();
     }
-
-    public SpeedCalculator(int averageDepth) {
-        mPreviousInputs = new double[averageDepth];
-    }
-
-    private double addToAverage(double speed) {
-        mSum -= mPreviousInputs[mIndex];
-        mSum += speed;
-        mPreviousInputs[mIndex] = speed;
-        if(++mIndex == mPreviousInputs.length) mIndex = 0;
-        double dLength = mPreviousInputs.length;
-        return (mSum + (dLength / 2d)) / dLength;
-    }
-
-    /**
-     * Update the current amount of bytes downloaded.
-     * @param bytes the new amount of bytes downloaded
-     * @return the current download speed in bytes per second
-     */
     public double feed(long bytes) {
-        long millis = System.currentTimeMillis();
-        long deltaBytes = bytes - mLastBytes;
-        long deltaMillis = millis - mLastMillis;
-        mLastBytes = bytes;
-        mLastMillis = millis;
-        double speed = (double)deltaBytes / ((double)deltaMillis / 1000d);
-        return addToAverage(speed);
+        long now=clock.getAsLong(),elapsed=now-lastNanos;
+        bytes=Math.max(0,bytes);
+        if(bytes<lastBytes || elapsed<0) {
+            Arrays.fill(samples,0);index=0;count=0;sum=0;lastBytes=bytes;lastNanos=now;return 0;
+        }
+        // Retain the byte delta until time advances: no division by zero and no lost bytes.
+        if(elapsed==0)return count==0?0:Math.max(0,sum/count);
+        double speed=(bytes-lastBytes)*1_000_000_000d/elapsed;
+        lastBytes=bytes;lastNanos=now;
+        if(!Double.isFinite(speed)||speed<0)speed=0;
+        sum-=samples[index];sum+=speed;samples[index]=speed;
+        index=(index+1)%samples.length;if(count<samples.length)count++;
+        return Math.max(0,sum/count);
     }
 }

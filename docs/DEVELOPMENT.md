@@ -18,17 +18,19 @@ Le `client_id` est défini à la compilation et ne peut pas être changé depuis
 
 Sans racines configurées, la vérification des signatures des manifestes est désactivée. Les empreintes des fichiers téléchargés restent vérifiées. Les builds distribués doivent fournir les racines publiques du site ; ne pas les récupérer automatiquement depuis le serveur que l’on cherche à vérifier.
 
-## Préparation de Java 21
+## Runtimes Java à la demande
 
-```bash
-./scripts/prepare-jre21.sh
-```
+Aucun runtime Java n’est embarqué dans l’APK. Il n’y a pas d’étape de préparation de JRE avant la compilation ; les anciens assets de runtimes sont exclus du packaging même lorsqu’ils subsistent dans un checkout local.
 
-Le script récupère les archives de la [release Amethyst Java 21](https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/tag/download_jre21), vérifie leurs SHA-256 et utilise le repacker officiel épinglé au commit `4527b5a73dcf3f890b45eab4c6a91651ea28a5ea`, lui-même vérifié par son empreinte. La recompression tourne à priorité minimale. La CI utilise la même préparation.
+Le démarrage du launcher et la connexion au compte ne nécessitent pas de JRE Minecraft installé. Lors de l’installation d’un pack, le launcher réutilise un runtime compatible ou télécharge celui nécessaire au jeu. La version demandée par les métadonnées du jeu, y compris celles héritées par un profil Fabric, détermine le runtime nécessaire. Les installateurs de loaders disposent également de ce chemin d’installation.
 
-Les assets générés `app_pojavlauncher/src/main/assets/components/jre-21/` sont ignorés par Git. Le script remplace les assets embarqués Java 8/17/25, sans modifier les runtimes déjà installés sur les appareils. `SN3_JRE_DOWNLOAD_DIR` permet de réutiliser les quatre archives locales ; leur vérification reste obligatoire.
+Les runtimes et les choix explicites existants sont conservés. Une installation complète reste lançable hors connexion ; un runtime absent doit être installé en ligne. Les données de l’application contiennent les runtimes extraits utilisés par le jeu, sans copie d’archive intégrée dans le nouvel APK.
 
-Une nouvelle installation utilise `Internal-21`. À la première migration, l’ancien choix global `Internal` passe à `Internal-21`. Les sélections suivantes restent libres et les profils qui ciblent explicitement un Java 8 installé sont conservés ; aucun runtime utilisateur n’est renommé en Java 21.
+## Priorité des réglages JVM
+
+Les préférences Java Amethyst fournissent les valeurs globales par défaut. Des exceptions indépendantes, activées explicitement par modpack, peuvent remplacer la mémoire et les arguments. Les anciens fichiers de préférences conservent leur allocation ; leurs arguments non vides sont conservés comme exceptions. Les nouveaux packs suivent les réglages globaux.
+
+La résolution utilise les valeurs globales actuelles à chaque lancement, en ligne comme hors connexion. Des arguments propres vides remplacent réellement les arguments globaux non vides. Les exceptions d’un pack ne modifient pas les préférences globales et préservent son canal et son choix de runtime. Le champ JVM natif reste éditable pour les profils Amethyst ordinaires ; pour les profils Snake N3st, la gestion du modpack constitue le point d’édition.
 
 ## Session et données locales
 
@@ -123,3 +125,25 @@ Ce contrôle utilise une session et un modpack déjà installés. Il vérifie la
 Le runner `UpdateVerifierInstrumentation` teste le vérificateur réel du système sur quatre petits APK : version supérieure avec la bonne signature, version identique, autre package et autre signature. Il n’installe aucun APK factice.
 
 Compiler l’application et le runner à priorité minimale avec `./scripts/build-sn3.sh :sn3-core:test :app_pojavlauncher:assembleDebug :app_pojavlauncher:assembleDebugAndroidTest -Psn3.clientId=…`. Installer les deux APK debug sur l’appareil de test. Préparer les fixtures avec `scripts/prepare-update-verifier-fixtures.py --apk CHEMIN_APK_DEBUG --aapt CHEMIN_AAPT --apksigner CHEMIN_APKSIGNER --android-jar CHEMIN_ANDROID_JAR --output /tmp/sn3-update-verifier`. Copier ses quatre `.apk` dans le répertoire privé `cache/sn3-update-verifier` du launcher, puis lancer `adb shell am instrument -w mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation`. Le résultat attendu est quatre contrôles réussis. Ces essais interrompent le processus du launcher : fermer toute partie avant de les lancer.
+
+## Vérifications JVM, runtimes et téléchargements
+
+Le runner peut vérifier les priorités des réglages JVM et la sélection de Java avec des préférences et des fichiers isolés, sans modifier les runtimes installés :
+
+```bash
+adb shell am instrument -w -e jvmSettings true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+```
+
+Il vérifie aussi la planification sans HEAD ni doublon et les transferts atomiques avec de fausses connexions HTTP : réponses 404/500, flux tronqué, annulation et conservation du fichier précédent. Les tests du cœur couvrent le nombre maximal de workers et leur arrêt complet sur erreur ou annulation.
+
+Pour rendre et vérifier l’écran sans compte avec un dépôt de session fictif, puis contrôler son retour à l’accueil :
+
+```bash
+adb shell am instrument -w -e login true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+```
+
+Ce test ne déconnecte pas le compte réel et ne lance pas de connexion distante. La capture de son écran est conservée dans le cache privé sous `sn3-login-check.png`.
+
+La limite de transferts Minecraft est stockée dans la préférence `sn3.downloadThreads` (8 par défaut, bornée entre 2 et 16). Les requêtes HEAD de planification sont évitées, les destinations sont dédupliquées, et Java participe au même lot borné que les fichiers. Les métadonnées héritées sont résolues avant ce lot. Les transferts échoués ou annulés ne remplacent pas leur fichier précédent et les workers s’arrêtent avant que l’opération rende la main.

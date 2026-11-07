@@ -25,6 +25,7 @@ public final class Sn3GameBridge {
     private static final String SEED = "sn3.session.seed";
     private static final String PIN = "sn3.session.pinKey";
     private static final String MEMORY = "sn3.memory";
+    public static final String ARGUMENTS = "sn3.jvm.arguments";
     private Sn3GameBridge() { }
     public static boolean hasSession(Context c) { return SnakeRepository.get(c).session != null; }
     public static boolean isRunning(Context c) {
@@ -63,6 +64,7 @@ public final class Sn3GameBridge {
         Intent game = new Intent(activity, MainActivity.class);
         game.putExtra(MainActivity.INTENT_MINECRAFT_VERSION, version);
         game.putExtra(SEED, r.session.key().seed()); game.putExtra(MEMORY, settings.memoryMb());
+        game.putExtra(ARGUMENTS, SnakeJvmSettings.validateArguments(Objects.toString(settings.extraJvmArgs(), "")));
         if (r.pinKey != null) game.putExtra(PIN, r.pinKey.getEncoded());
         if (Thread.currentThread().isInterrupted()) { r.sealAll(); throw new InterruptedException(); }
         if (activity.isFinishing() || activity.isDestroyed()) { r.sealAll(); throw new IOException("La préparation est terminée. Rouvre le modpack pour jouer."); }
@@ -93,8 +95,8 @@ public final class Sn3GameBridge {
         MinecraftProfile profile = existing == null ? new MinecraftProfile() : new MinecraftProfile(existing);
         profile.name = "Snake N3st — " + slug;
         profile.lastVersionId = version; profile.gameDir = r.instance(slug).toString();
-        profile.javaArgs = settings.extraJvmArgs() == null ? "" : settings.extraJvmArgs();
-        if (profile.javaArgs.contains("sn3.token")) throw new IllegalArgumentException("sn3.token est géré par le launcher.");
+        // Effective args travel in the game Intent, so inheriting globals never snapshots them here.
+        profile.javaArgs = "";
         SnakePackIcons.applyToProfile(activity, slug, profile);
         LauncherProfiles.mainProfileJson.profiles.put(id, profile); LauncherProfiles.write();
         LauncherPreferences.DEFAULT_PREF.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, id).commit();
@@ -208,6 +210,13 @@ public final class Sn3GameBridge {
         else ForgeUtils.addAutoInstallArgs(intent, jar, id);
         activity.runOnUiThread(() -> { activity.startActivity(intent); new android.app.AlertDialog.Builder(activity).setTitle("Installation du loader").setMessage("Termine l’installation puis touche Jouer à nouveau.").setPositiveButton("OK",null).show(); });
         return null;
+    }
+    /** A present empty extra deliberately overrides non-empty global or stale profile arguments. */
+    public static String effectiveArguments(Activity activity, String legacyProfileArgs) {
+        Intent intent=activity.getIntent();
+        if(intent!=null && intent.hasExtra(ARGUMENTS))
+            return SnakeJvmSettings.validateArguments(Objects.toString(intent.getStringExtra(ARGUMENTS),""));
+        return Tools.isValidString(legacyProfileArgs)?legacyProfileArgs:LauncherPreferences.PREF_CUSTOM_JAVA_ARGS;
     }
     public static void applyMemory(Activity activity) {
         int memory = activity.getIntent().getIntExtra(MEMORY, 0);

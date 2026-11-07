@@ -153,7 +153,7 @@ public final class ModpackManagerFragment extends Fragment {
         if (!ready()) return;
         boolean installed = !repo.busy && repo.isInstalled(slug);
         boolean running = Sn3GameBridge.isRunning(requireContext());
-        state.setText(repo.removedPacks.contains(slug)?"Retiré du site · lancement local uniquement":repo.offlineMode?"Hors connexion · fichiers locaux uniquement":repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
+        state.setText(repo.removedPacks.contains(slug)?"Retiré du site":repo.offlineMode?"Hors connexion · téléchargements indisponibles":repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
         install.setText(repo.busy ? "Annuler" : installed ? "Réparer" : "Installer");
         install.setEnabled(!running && (repo.busy || !repo.localOnly(slug))); play.setVisibility(installed ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
         offline.setVisibility(!repo.busy && repo.error != null && repo.session != null && repo.offlineAvailable && !repo.offlineMode ? View.VISIBLE : View.GONE);
@@ -193,7 +193,11 @@ public final class ModpackManagerFragment extends Fragment {
     }
     private void instancePage() {
         text("Préférences de l’instance", 18, true);
-        button(content, "Mémoire et arguments JVM", this::settingsDialog, true);
+        var jvm = new SnakeJvmSettings(requireContext());
+        text("Mémoire : " + (jvm.memoryOverride(slug) ? "réglage propre au modpack" : "réglage global Amethyst")
+                + " · " + jvm.resolve(slug).memoryMb() + " Mo\nArguments JVM : "
+                + (jvm.argumentsOverride(slug) ? "réglage propre au modpack" : "réglage global Amethyst"), 14, false);
+        button(content, "Réglages Java de ce modpack", this::settingsDialog, true);
         button(content, "Canal de distribution", this::chooseChannel, true);
         button(content, "Version du modpack", this::choosePackVersion, true);
         button(content, "Rendu, runtime et contrôles Amethyst", this::editAmethystProfile, true);
@@ -330,17 +334,36 @@ public final class ModpackManagerFragment extends Fragment {
         });
     }
     private void settingsDialog() {
-        ModpackSettings settings = repo.settings(slug);
-        LinearLayout form = new LinearLayout(requireContext()); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(16),0,dp(16),0);
-        EditText memory = new EditText(requireContext()); memory.setHint("Mémoire (Mo)"); memory.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); memory.setText(String.valueOf(settings.memoryMb())); form.addView(memory);
-        EditText arguments = new EditText(requireContext()); arguments.setHint("Arguments JVM"); arguments.setText(settings.extraJvmArgs()); form.addView(arguments);
-        new AlertDialog.Builder(requireContext()).setTitle("Réglages du modpack").setView(form).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w) -> {
+        ModpackSettings settings = new ModpackSettingsStore(repo.dirs).load(slug,ModpackSettings.defaults());
+        SnakeJvmSettings jvm = new SnakeJvmSettings(requireContext());
+        LinearLayout form = new LinearLayout(requireContext()); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(18),dp(8),dp(18),dp(12));
+        TextView explanation = new TextView(requireContext());
+        explanation.setText("Les réglages globaux se trouvent dans Paramètres → Java. Les exceptions ci-dessous concernent uniquement ce modpack.");
+        explanation.setPadding(0,0,0,dp(16)); form.addView(explanation);
+        TextView memoryTitle = new TextView(requireContext()); memoryTitle.setText("Mémoire du jeu"); memoryTitle.setTypeface(null,android.graphics.Typeface.BOLD); form.addView(memoryTitle);
+        CheckBox globalMemory = new CheckBox(requireContext()); globalMemory.setText("Utiliser l’allocation globale ("+jvm.globalMemory()+" Mo)"); globalMemory.setChecked(!jvm.memoryOverride(slug)); form.addView(globalMemory);
+        EditText memory = new EditText(requireContext()); memory.setHint("Allocation propre au modpack (Mo)"); memory.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); memory.setText(String.valueOf(settings.memoryMb())); form.addView(memory);
+        TextView argumentsTitle = new TextView(requireContext()); argumentsTitle.setText("Arguments JVM"); argumentsTitle.setTypeface(null,android.graphics.Typeface.BOLD); argumentsTitle.setPadding(0,dp(18),0,0); form.addView(argumentsTitle);
+        CheckBox globalArguments = new CheckBox(requireContext()); globalArguments.setText("Utiliser les arguments JVM globaux"); globalArguments.setChecked(!jvm.argumentsOverride(slug)); form.addView(globalArguments);
+        TextView argumentsHelp = new TextView(requireContext()); argumentsHelp.setText("Les arguments propres remplacent les arguments globaux. Laisse le champ vide pour ne fournir aucun argument personnalisé. La mémoire se règle ci-dessus, sans -Xmx ni -Xms."); form.addView(argumentsHelp);
+        EditText arguments = new EditText(requireContext()); arguments.setHint("Arguments propres à ce modpack"); arguments.setText(settings.extraJvmArgs()); arguments.setMinLines(2); form.addView(arguments);
+        TextView validation = new TextView(requireContext()); validation.setTextColor(0xffffaaaa); form.addView(validation);
+        Runnable visibility = () -> { memory.setVisibility(globalMemory.isChecked()?View.GONE:View.VISIBLE); arguments.setVisibility(globalArguments.isChecked()?View.GONE:View.VISIBLE); argumentsHelp.setVisibility(globalArguments.isChecked()?View.GONE:View.VISIBLE); };
+        globalMemory.setOnCheckedChangeListener((v,checked)->visibility.run()); globalArguments.setOnCheckedChangeListener((v,checked)->visibility.run()); visibility.run();
+        ScrollView scroll = new ScrollView(requireContext()); scroll.addView(form);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setTitle("Java · ce modpack").setView(scroll).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
-                int megabytes = Integer.parseInt(memory.getText().toString()); String args = arguments.getText().toString();
-                if (megabytes < 256 || megabytes > Tools.getTotalDeviceMemory(requireContext()) || args.contains("sn3.token")) throw new IllegalArgumentException("Mémoire ou arguments JVM invalides.");
-                if (!repo.busy && !Sn3GameBridge.isRunning(requireContext())) new ModpackSettingsStore(repo.dirs).save(slug,new ModpackSettings(megabytes,args,settings.channel(),settings.javaPath()));
-            } catch (Exception exception) { error.setText(exception.getMessage()); error.setVisibility(View.VISIBLE); }
-        }).show();
+                if(repo.busy || Sn3GameBridge.isRunning(requireContext())) throw new IllegalStateException("Attends la fin de l’opération ou ferme le jeu avant de modifier ces réglages.");
+                int megabytes = globalMemory.isChecked()?settings.memoryMb():Integer.parseInt(memory.getText().toString());
+                String args = arguments.getText().toString();
+                if(!globalMemory.isChecked() && (megabytes<256 || megabytes>Tools.getTotalDeviceMemory(requireContext()))) throw new IllegalArgumentException("Allocation hors des limites de cet appareil.");
+                if(!globalArguments.isChecked() && (args.contains("sn3.token") || args.matches("(?s).*(?:^|\\s)-Xm[sx]\\S*.*"))) throw new IllegalArgumentException("Règle la mémoire avec son allocation ; le jeton est géré par le launcher.");
+                jvm.save(slug,megabytes,args,!globalMemory.isChecked(),!globalArguments.isChecked());
+                dialog.dismiss(); renderPage();
+            } catch(Exception failure) { validation.setText(failure instanceof NumberFormatException?"Indique une allocation en Mo.":failure.getMessage()); }
+        }));
+        dialog.show();
     }
     private void chooseChannel() {
         operation("Chargement des canaux…", () -> {
@@ -348,7 +371,7 @@ public final class ModpackManagerFragment extends Fragment {
             for (int index=0; index<choices.size(); index++) labels[index+1] = choices.get(index).name() + (choices.get(index).restricted() ? " · Restreint" : "");
             onMain(() -> new AlertDialog.Builder(requireContext()).setTitle("Canal de distribution").setItems(labels,(d,index) -> {
                 if (repo.busy) return;
-                ModpackSettings current = repo.settings(slug); new ModpackSettingsStore(repo.dirs).save(slug,new ModpackSettings(current.memoryMb(),current.extraJvmArgs(),index==0?null:choices.get(index-1).name(),current.javaPath()));
+                ModpackSettings current = new ModpackSettingsStore(repo.dirs).load(slug,ModpackSettings.defaults()); new ModpackSettingsStore(repo.dirs).save(slug,new ModpackSettings(current.memoryMb(),current.extraJvmArgs(),index==0?null:choices.get(index-1).name(),current.javaPath()));
                 repo.prefs.edit().remove("version."+slug).apply(); renderPage();
             }).setNegativeButton("Annuler",null).show());
         });
@@ -371,7 +394,7 @@ public final class ModpackManagerFragment extends Fragment {
             if (!profiles.containsKey(id)) {
                 if(manifest==null) throw new java.io.IOException("Profil local manquant. Reviens en ligne pour installer ce modpack.");
                 var profile = new mc.snakenest.launcher.android.value.launcherprofiles.MinecraftProfile(); profile.name = "Snake N3st — "+slug;
-                profile.gameDir = repo.instance(slug).toString(); profile.lastVersionId = manifest.mcVersion(); profile.javaArgs = repo.settings(slug).extraJvmArgs(); SnakePackIcons.applyToProfile(requireContext(),slug,profile); profiles.put(id,profile);
+                profile.gameDir = repo.instance(slug).toString(); profile.lastVersionId = manifest.mcVersion(); profile.javaArgs = ""; SnakePackIcons.applyToProfile(requireContext(),slug,profile); profiles.put(id,profile);
                 mc.snakenest.launcher.android.value.launcherprofiles.LauncherProfiles.write();
             }
             mc.snakenest.launcher.android.prefs.LauncherPreferences.DEFAULT_PREF.edit().putString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();

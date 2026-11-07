@@ -202,6 +202,12 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
 
         mDefaultVersion.setText(mTempProfile.lastVersionId);
         mDefaultJvmArgument.setText(mTempProfile.javaArgs == null ? "" : mTempProfile.javaArgs);
+        mDefaultJvmArgument.setEnabled(!managedIcon);
+        mDefaultJvmArgument.setHint(managedIcon ? R.string.sn3_managed_arguments_hint : R.string.use_global_default);
+        mDefaultJvmArgument.setTooltipText(managedIcon ? getString(R.string.sn3_managed_arguments_hint) : null);
+        ((android.widget.TextView)mDefaultJvmArgument.getRootView().findViewById(R.id.textView6))
+                .setText(managedIcon ? R.string.sn3_managed_arguments_title : R.string.pvc_jvmArgs);
+
         mDefaultName.setText(mTempProfile.name);
         mDefaultPath.setText(mTempProfile.gameDir == null ? "" : mTempProfile.gameDir);
         mDefaultControl.setText(mTempProfile.controlFile == null ? "" : mTempProfile.controlFile);
@@ -256,13 +262,13 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
         mTempProfile.lastVersionId = mDefaultVersion.getText().toString();
         mTempProfile.controlFile = mDefaultControl.getText().toString();
         mTempProfile.name = mDefaultName.getText().toString();
-        mTempProfile.javaArgs = mDefaultJvmArgument.getText().toString()
+        if(mDefaultJvmArgument.isEnabled()) mTempProfile.javaArgs = mDefaultJvmArgument.getText().toString()
                 .replaceAll("[\r\n]+", " ")
                 .trim();
         mTempProfile.gameDir = mDefaultPath.getText().toString();
 
         if(mTempProfile.controlFile.isEmpty()) mTempProfile.controlFile = null;
-        if(mTempProfile.javaArgs.isEmpty()) mTempProfile.javaArgs = null;
+        if(mTempProfile.javaArgs!=null && mTempProfile.javaArgs.isEmpty()) mTempProfile.javaArgs = null;
         if(mTempProfile.gameDir.isEmpty()) mTempProfile.gameDir = null;
 
         Runtime selectedRuntime = (Runtime) mDefaultRuntime.getSelectedItem();

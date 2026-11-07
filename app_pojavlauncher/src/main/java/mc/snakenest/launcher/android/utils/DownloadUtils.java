@@ -22,32 +22,35 @@ public class DownloadUtils {
     }
 
     public static void download(URL url, OutputStream os) throws IOException {
-        InputStream is = null;
+        HttpURLConnection connection=(HttpURLConnection)url.openConnection();
         try {
-            // System.out.println("Connecting: " + url.toString());
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", USER_AGENT);
-            conn.setConnectTimeout(TIME_OUT);
-            conn.setReadTimeout(TIME_OUT);
-            conn.setDoInput(true);
-            conn.connect();
-            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                throw new IOException("Server returned HTTP " + conn.getResponseCode()
-                        + ": " + conn.getResponseMessage());
-            }
-            is = conn.getInputStream();
-            IOUtils.copy(is, os);
-        } catch (IOException e) {
-            throw new IOException("Unable to download from " + url, e);
-        } finally {
-            if (is != null) {
-                try {
-                    is.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+            configure(connection);checkStatus(connection);
+            try(InputStream input=connection.getInputStream()) { copy(input,os,connection.getContentLengthLong(),new byte[65536],null); }
+        } finally { connection.disconnect(); }
+    }
+    private static void configure(HttpURLConnection connection) {
+        connection.setRequestProperty("User-Agent",USER_AGENT);
+        connection.setRequestProperty("Accept-Encoding","identity");
+        connection.setConnectTimeout(TIME_OUT);connection.setReadTimeout(TIME_OUT);
+    }
+    private static void checkStatus(HttpURLConnection connection) throws IOException {
+        int status=connection.getResponseCode();
+        if(status==404)throw new FileNotFoundException("HTTP 404");
+        if(status!=200)throw new IOException("Download returned HTTP "+status);
+    }
+    private static void copy(InputStream input,OutputStream output,long expected,byte[] buffer,@Nullable Tools.DownloaderFeedback monitor) throws IOException {
+        long overall=0,lastReport=0;
+        while(true) {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Download cancelled");
+            int count=input.read(buffer);if(count<0)break;
+            output.write(buffer,0,count);overall+=count;
+            long now=System.nanoTime();
+            if(monitor!=null && (now-lastReport>=50_000_000L || overall==expected)) {
+                monitor.updateProgress((int)Math.min(Integer.MAX_VALUE,overall),(int)Math.min(Integer.MAX_VALUE,expected));lastReport=now;
             }
         }
+        if(expected>=0 && overall!=expected)throw new EOFException("Incomplete download");
+        if(monitor!=null)monitor.updateProgress((int)Math.min(Integer.MAX_VALUE,overall),(int)Math.min(Integer.MAX_VALUE,expected));
     }
 
     public static String downloadString(String url) throws IOException {
@@ -58,41 +61,29 @@ public class DownloadUtils {
     }
 
     public static void downloadFile(String url, File out) throws IOException {
-        FileUtils.ensureParentDirectory(out);
-        try (FileOutputStream fileOutputStream = new FileOutputStream(out)) {
-            download(url, fileOutputStream);
-        } catch (IOException e) {
-            if (out.length() < 1) { // Only delete it if file is 0 bytes cause this file might already be downloaded and something else went wrong.
-                Log.i("DownloadUtils", "Cleaning up failed download: " + out.getAbsolutePath());
-                out.delete();
-                throw e;
-            }
-        }
+        downloadFileMonitored(url,out,null,(current,total)->{});
     }
 
     public static void downloadFileMonitored(String urlInput, File outputFile, @Nullable byte[] buffer,
                                              Tools.DownloaderFeedback monitor) throws IOException {
+        downloadFileMonitored(new URL(urlInput),outputFile,buffer,monitor);
+    }
+
+    static void downloadFileMonitored(URL source, File outputFile, @Nullable byte[] buffer,
+                                      Tools.DownloaderFeedback monitor) throws IOException {
         FileUtils.ensureParentDirectory(outputFile);
-
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlInput).openConnection();
-        conn.setConnectTimeout(TIME_OUT);
-        conn.setReadTimeout(TIME_OUT);
-        InputStream readStr = conn.getInputStream();
-        try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-            int current;
-            int overall = 0;
-            int length = conn.getContentLength();
-
-            if (buffer == null) buffer = new byte[65535];
-
-            while ((current = readStr.read(buffer)) != -1) {
-                overall += current;
-                fos.write(buffer, 0, current);
-                monitor.updateProgress(overall, length);
+        java.nio.file.Path part=java.nio.file.Files.createTempFile(outputFile.getAbsoluteFile().getParentFile().toPath(),".sn3-download-",".part");
+        HttpURLConnection connection=null;
+        try {
+            connection=(HttpURLConnection)source.openConnection();configure(connection);checkStatus(connection);
+            try(InputStream input=connection.getInputStream();OutputStream output=java.nio.file.Files.newOutputStream(part)) {
+                copy(input,output,connection.getContentLengthLong(),buffer==null?new byte[65536]:buffer,monitor);
             }
-            conn.disconnect();
-        } catch (IOException e) {
-            throw new IOException("Unable to download from " + urlInput, e);
+            if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Download cancelled");
+            java.nio.file.Files.move(part,outputFile.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING,java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            if(connection!=null)connection.disconnect();
+            java.nio.file.Files.deleteIfExists(part);
         }
     }
 
@@ -147,10 +138,11 @@ public class DownloadUtils {
     }
 
     public static <T> T ensureSha1(File outputFile, @Nullable String sha1, Callable<T> downloadFunction) throws IOException {
+        if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Download cancelled");
         // Skip if needed
         if(sha1 == null) {
             // If the file exists and we don't know it's SHA1, don't try to redownload it.
-            if(outputFile.exists()) return null;
+            if(outputFile.isFile() && outputFile.length()>0) return null;
             else return downloadFile(downloadFunction);
         }
 

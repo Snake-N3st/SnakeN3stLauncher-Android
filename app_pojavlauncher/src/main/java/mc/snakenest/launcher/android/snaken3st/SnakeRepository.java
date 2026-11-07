@@ -262,7 +262,8 @@ final class SnakeRepository {
         if (id.equals(current) || !profileStore.profiles.containsKey(current)) launcherPrefs.edit()
                 .putString(mc.snakenest.launcher.android.prefs.LauncherPreferences.PREF_KEY_CURRENT_PROFILE,
                         profileStore.profiles.keySet().iterator().next()).commit();
-        SharedPreferences.Editor edit = prefs.edit().remove("version." + slug).remove("installed." + slug).remove("installing." + slug);
+        SharedPreferences.Editor edit = prefs.edit().remove("version." + slug).remove("installed." + slug).remove("installing." + slug)
+                .remove("jvm.memoryOverride." + slug).remove("jvm.argumentsOverride." + slug);
         if (slug.equals(prefs.getString("selected-pack", null))) edit.remove("selected-pack");
         for (String key : prefs.getAll().keySet()) if (key.startsWith("mod." + slug + ".")) edit.remove(key);
         if (!edit.commit()) throw new java.io.IOException("Les préférences du modpack n’ont pas pu être nettoyées.");
@@ -290,7 +291,7 @@ final class SnakeRepository {
         }
     }
 
-    ModpackSettings settings(String slug) { return new ModpackSettingsStore(dirs).load(slug, ModpackSettings.defaults()); }
+    ModpackSettings settings(String slug) { return new SnakeJvmSettings(context).resolve(slug); }
     ModpackManifest manifest(String slug) throws Exception {
         requireSlug(slug); requireOnline(slug); ModpackSettings s = settings(slug);
         return api().getManifest(slug, prefs.getString("version." + slug, null), s.channel(), requireSession());
@@ -300,6 +301,7 @@ final class SnakeRepository {
     ModpackManifest sync(String slug, boolean repair) throws Exception {
         ModpackManifest m = manifest(slug); Path dir = instance(slug);
         beginInstallation(slug);
+        new SnakeJvmSettings(context).initialFlags(slug);
         ModpackSettingsStore settings = new ModpackSettingsStore(dirs);
         if (!Files.exists(dirs.modpackSettingsFile(slug))) settings.save(slug, ModpackSettings.defaults(m.defaultMemoryMb(), m.defaultJvmArgs()));
         if (pinKey != null) SensitiveFileVault.decryptAll(dir, pinKey);

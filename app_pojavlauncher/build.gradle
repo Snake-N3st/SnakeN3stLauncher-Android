@@ -216,6 +216,12 @@ android {
         }
     }
 
+    // Never package a Java runtime, even if assets from an older local build remain present.
+    // Java is installed on demand by NewJREUtil and reused from the app's runtime directory.
+    sourceSets {
+        main.assets.setSrcDirs([layout.buildDirectory.dir('generated/sn3-assets')])
+    }
+
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
@@ -244,8 +250,17 @@ afterEvaluate {
             ":jre_lwjgl3glfw:jar"
     ]
 
+    // AGP asset merging does not honor AndroidSourceDirectorySet.exclude consistently.
+    // Feed it a filtered generated directory, after all native component JARs are ready.
+    def sn3Assets = tasks.register("prepareSn3Assets", Sync) {
+        dependsOn(componentJars)
+        from("src/main/assets") {
+            exclude 'components/jre/**', 'components/jre-new/**', 'components/jre-*/**'
+        }
+        into(layout.buildDirectory.dir('generated/sn3-assets'))
+    }
     tasks.withType(com.android.build.gradle.tasks.MergeSourceSetFolders).configureEach { t ->
-        t.dependsOn(componentJars)
+        t.dependsOn(sn3Assets)
     }
 
     // Needed or else the release builds complain about undeclared dependencies
