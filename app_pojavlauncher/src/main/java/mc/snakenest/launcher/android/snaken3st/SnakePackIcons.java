@@ -128,8 +128,15 @@ public final class SnakePackIcons {
         Runnable read = () -> {
             synchronized (SnakePackIcons.class) {
                 ensureLoaded(); Entry entry = ICONS.get(key(pack.slug()));
-                try { callback.accept(entry == null || entry.icon() == null ? null : ProfileIconCache.fetchIcon(context.getResources(),key(pack.slug()),entry.icon())); }
-                catch (RuntimeException ignored) { callback.accept(null); }
+                try {
+                    String icon=entry == null ? null : entry.icon();
+                    if(icon==null) {
+                        var profiles=readProfiles();
+                        var profile=profiles==null || profiles.profiles==null ? null : profiles.profiles.get(key(pack.slug()));
+                        if(profile!=null && profile.icon!=null && profile.icon.startsWith("data:image/") && profile.icon.length()<=1024*1024) icon=profile.icon;
+                    }
+                    callback.accept(icon==null ? null : ProfileIconCache.fetchIcon(context.getResources(),key(pack.slug()),icon));
+                } catch (Exception ignored) { callback.accept(null); }
             }
         };
         if (Looper.myLooper() == Looper.getMainLooper()) read.run(); else MAIN.post(read);

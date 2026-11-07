@@ -4,15 +4,12 @@ import android.app.AlertDialog;
 import android.content.*;
 import android.net.Uri;
 import android.os.Bundle;
-import android.graphics.Color;
 import android.text.*;
 import android.view.*;
 import android.widget.*;
-import androidx.appcompat.app.AppCompatActivity;
 import mc.snakenest.launcher.android.*;
 import mc.snakenest.launcher.modpack.*;
 import mc.snakenest.launcher.modrinth.*;
-import mc.snakenest.launcher.news.*;
 import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
@@ -26,6 +23,7 @@ public final class SnakeUi extends ContextWrapper {
     private String openedLogin;
     private String shownError;
     private boolean restoreAttempted;
+    private AlertDialog accountDialog;
     private final Runnable observer = this::render;
     public SnakeUi(LauncherActivity host, View menu) {
         super(host); this.host=host; this.menu=menu; repo=SnakeRepository.get(host);
@@ -76,7 +74,7 @@ public final class SnakeUi extends ContextWrapper {
         ((TextView)host.findViewById(R.id.sn3_account_button)).setText(repo.offlineMode?offlineLabel():repo.sessionRejected?"Revalider la session Snake N3st":repo.player==null?"Se connecter à Snake N3st":repo.player.username());
         ModpackSummary pack=selected();
         var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
-        account.setAvatar(repo.offlineMode || repo.player==null?null:repo.player.avatar(),repo.site());
+        account.setAvatar(repo.player==null?null:repo.player.avatar(),repo.site(),repo.session==null?0:repo.session.playerId(),repo.offlineMode);
         menu.findViewById(R.id.news_button).setEnabled(!repo.offlineMode);
         ((TextView)menu.findViewById(R.id.install_jar_button)).setText(repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
         var picker=(com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner);
@@ -90,19 +88,6 @@ public final class SnakeUi extends ContextWrapper {
     }
     private void account() {
         repo.observer=observer;
-        if (repo.offlineMode) {
-            new AlertDialog.Builder(this).setTitle(offlineLabel()).setMessage("Les modpacks installés restent jouables avec la clé locale. Les téléchargements et mises à jour sont désactivés.")
-                .setNegativeButton("Fermer",null).setNeutralButton("Compte",(d,w)->panel("Compte Snake N3st",this::showSettings))
-                .setPositiveButton("Revenir en ligne",(d,w)->repo.work("Connexion au site…",repo::refresh)).show(); return;
-        }
-        if (repo.sessionRejected) {
-            new AlertDialog.Builder(this).setTitle("Revalider cet appareil")
-                .setMessage("La requête de session a été refusée. La clé est conservée ; vérifie aussi l’horloge de cet appareil.")
-                .setNeutralButton("Passer hors connexion",(d,w)->enterOffline())
-                .setNegativeButton("Réessayer",(d,w)->repo.work("Validation de la session…",repo::refresh))
-                .setPositiveButton("Se reconnecter",(d,w)->idle(repo::login)).show();
-            return;
-        }
         if(repo.session==null) {
             if(repo.pin.isEnabled() && repo.pinKey==null) askPin(false); else idle(repo::login);
         } else panel("Compte Snake N3st",this::showSettings);
@@ -130,20 +115,19 @@ public final class SnakeUi extends ContextWrapper {
         ((com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner)).showPicker();
     }
     private void panel(String title,Runnable populate) {
-        ScrollView scroll=new ScrollView(this); content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20),dp(8),dp(20),dp(8)); scroll.addView(content); populate.run();
-        new AlertDialog.Builder(this).setTitle(title).setView(scroll).setNegativeButton("Fermer",null).show();
+        if(accountDialog!=null) accountDialog.dismiss();
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(false);
+        content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22),dp(22),dp(22),dp(12)); scroll.addView(content); populate.run();
+        accountDialog=new AlertDialog.Builder(this).setView(scroll).setNegativeButton("Fermer",null).create();
+        accountDialog.show();
+        if(accountDialog.getWindow()!=null) {
+            int width=Math.min(getResources().getDisplayMetrics().widthPixels-dp(32),dp(480));
+            accountDialog.getWindow().setLayout(width,-2);
+            accountDialog.getWindow().setBackgroundDrawable(rounded(getResources().getColor(R.color.background_status_bar),20));
+        }
     }
     private int dp(int n) { return (int) (n * getResources().getDisplayMetrics().density); }
-    private TextView text(String value, int sp, int color) {
-        TextView v = new TextView(this); v.setText(value == null ? "" : value); v.setTextSize(sp);
-        v.setPadding(0, dp(8), 0, dp(6)); content.addView(v); return v;
-    }
-    private LinearLayout row() { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); content.addView(row); return row; }
-    private void button(LinearLayout parent, String label, Runnable action) {
-        Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setOnClickListener(v -> action.run());
-        parent.addView(b, new LinearLayout.LayoutParams(parent == content ? -1 : 0, -2, parent == content ? 0 : 1));
-    }
     private void idle(Runnable action) { if (repo.busy) return; if (Sn3GameBridge.isRunning(this)) { notice("Jeu en cours", "Ferme Minecraft avant de modifier les instances ou le compte."); return; } action.run(); }
     private void manage(ModpackSummary pack) {
         ModpackManagerFragment.open(host, pack.slug(), false);
@@ -151,44 +135,81 @@ public final class SnakeUi extends ContextWrapper {
     private EditText field(LinearLayout parent, String hint, String value, int type) {
         EditText e = new EditText(this); e.setHint(hint); e.setInputType(type); e.setText(value); parent.addView(e); return e;
     }
-    private void showNews() {
-        button(content,"Actualiser les actualités", this::loadNews);
-        for (Post post : repo.posts) {
-            text(post.title(),22,Color.WHITE); text(post.description(),15,Color.LTGRAY);
-            button(content,"Lire l’article",() -> open(post.url()));
-        }
+    private void loadNews() {
+        if(repo.offlineMode) { notice("Hors connexion","Les actualités sont indisponibles hors connexion."); return; }
+        Sn3NewsFragment.open(host);
     }
-    private void loadNews() { if(repo.offlineMode) { notice("Hors connexion","Les actualités sont indisponibles hors connexion."); return; } repo.work("Chargement des actualités…",() -> {
-        repo.posts=new NewsApiClient(repo.http,URI.create(repo.site())).listPosts();
-        runOnUiThread(()->panel("Actualités Snake N3st",this::showNews));
-    }); }
+    private android.graphics.drawable.GradientDrawable rounded(int color,int radius) {
+        var background=new android.graphics.drawable.GradientDrawable(); background.setColor(color); background.setCornerRadius(dp(radius)); return background;
+    }
+    private TextView label(LinearLayout parent,String value,int size,int color) {
+        TextView label=new TextView(this); label.setText(value==null?"":value); label.setTextSize(size); label.setTextColor(color); parent.addView(label); return label;
+    }
+    private void section(String title) {
+        TextView label=label(content,title.toUpperCase(Locale.FRENCH),11,getResources().getColor(R.color.secondary_text));
+        label.setTypeface(null,android.graphics.Typeface.BOLD); label.setLetterSpacing(.08f); label.setPadding(0,dp(22),0,dp(8));
+    }
+    private void accountAction(String title,String subtitle,int icon,boolean danger,Runnable action) {
+        LinearLayout line=new LinearLayout(this); line.setOrientation(LinearLayout.HORIZONTAL); line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(dp(12),dp(10),dp(12),dp(10)); line.setMinimumHeight(dp(62));
+        android.util.TypedValue ripple=new android.util.TypedValue(); getTheme().resolveAttribute(android.R.attr.selectableItemBackground,ripple,true);
+        line.setBackgroundResource(ripple.resourceId);
+        ImageView image=new ImageView(this); image.setImageResource(icon); image.setColorFilter(danger?0xffffaaaa:getResources().getColor(R.color.minebutton_highlight));
+        line.addView(image,new LinearLayout.LayoutParams(dp(22),dp(22)));
+        LinearLayout words=new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams wordsLayout=new LinearLayout.LayoutParams(0,-2,1); wordsLayout.setMarginStart(dp(14)); line.addView(words,wordsLayout);
+        TextView heading=label(words,title,15,danger?0xffffaaaa:getResources().getColor(R.color.primary_text)); heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        if(subtitle!=null) {TextView sub=label(words,subtitle,12,getResources().getColor(R.color.secondary_text));sub.setPadding(0,dp(3),0,0);}
+        TextView arrow=new TextView(this);arrow.setText("›");arrow.setTextSize(23);arrow.setTextColor(getResources().getColor(R.color.secondary_text));line.addView(arrow);
+        line.setFocusable(true);line.setClickable(true);line.setContentDescription(title+(subtitle==null?"":", "+subtitle));
+        line.setOnClickListener(v->{if(accountDialog!=null)accountDialog.dismiss();action.run();});content.addView(line,new LinearLayout.LayoutParams(-1,-2));
+    }
     private void showSettings() {
-        text("Compte et sécurité",22,Color.WHITE);
-        text(repo.site(),14,Color.LTGRAY);
-        if (repo.session != null) { text(repo.player==null?offlineLabel():repo.player.username()+"\n"+repo.player.email(),16,Color.WHITE);
-            button(content,repo.offlineMode?"Revenir en ligne":"Passer hors connexion",() -> idle(() -> {
-                if(repo.offlineMode) repo.work("Reconnexion…",repo::refresh); else enterOffline();
-            }));
-            if (!repo.pin.isEnabled()) button(content,"Protéger avec un PIN",() -> idle(() -> askPin(true)));
-            else { text("Protection par PIN activée",16,Color.LTGRAY);
-                button(content,"Désactiver le PIN", () -> idle(() -> new AlertDialog.Builder(this).setTitle("Désactiver le PIN ?")
-                    .setMessage("Les fichiers .cryptlist seront déchiffrés et la session restera protégée par Android Keystore.")
-                    .setNegativeButton("Annuler",null).setPositiveButton("Désactiver",(d,w)->repo.disablePin()).show()));
-            }
-            button(content,"Se déconnecter",() -> idle(() -> new AlertDialog.Builder(this).setTitle("Se déconnecter ?").setMessage("La clé sera révoquée sur le site et la session locale supprimée.")
-                    .setNegativeButton("Annuler",null).setPositiveButton("Déconnexion",(d,w) -> repo.logout()).show()));
+        int primary=getResources().getColor(R.color.primary_text),secondary=getResources().getColor(R.color.secondary_text);
+        LinearLayout identity=new LinearLayout(this);identity.setOrientation(LinearLayout.HORIZONTAL);identity.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView avatar=new ImageView(this);avatar.setImageResource(R.drawable.sn3_account_avatar);avatar.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        avatar.setContentDescription("Avatar du compte");identity.addView(avatar,new LinearLayout.LayoutParams(dp(64),dp(64)));
+        if(repo.session!=null) {
+            var cached=AvatarDiskCache.read(this,repo.site(),repo.session.playerId());if(cached!=null)avatar.setImageBitmap(cached);
+            if(!repo.offlineMode && repo.player!=null)RemoteIconLoader.load(this,repo.player.avatar(),repo.site(),image->{if(image!=null)avatar.setImageDrawable(image);});
         }
-        text("Jeu et commandes tactiles",22,Color.WHITE);
-
-        button(content,"Éditeur des contrôles",() -> startActivity(new Intent(this,CustomControlsActivity.class)));
-        button(content,"Signaler un bug",this::reportBug);
-        button(content,"Rechercher une mise à jour du launcher",() -> { if(repo.offlineMode) notice("Hors connexion","Les mises à jour sont indisponibles hors connexion."); else SnakeUpdater.get(host).check(host,true); });
-        Switch automaticUpdates = new Switch(this); automaticUpdates.setText("Vérifier automatiquement les mises à jour");
-        automaticUpdates.setChecked(SnakeUpdater.get(host).automatic());
-        automaticUpdates.setOnCheckedChangeListener((view,enabled) -> SnakeUpdater.get(host).setAutomatic(enabled)); content.addView(automaticUpdates);
-        button(content,"Site Snake N3st",() -> open(repo.site()));
-        button(content,"Code source et licences",() -> open("https://github.com/Snake-N3st/SnakeN3stLauncher-Android"));
-        text("Snake N3st pour Android\nBasé sur Amethyst / PojavLauncher. Cœur Snake N3st sous GPL-3.0 ; voir les licences dans le dépôt.",14,Color.LTGRAY);
+        LinearLayout words=new LinearLayout(this);words.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams wordsLayout=new LinearLayout.LayoutParams(0,-2,1);wordsLayout.setMarginStart(dp(16));identity.addView(words,wordsLayout);
+        String username=repo.player==null?"Compte Snake N3st":repo.player.username();
+        if(repo.player==null)try{username=repo.cachedUsername();}catch(Exception ignored){}
+        TextView name=label(words,username,23,primary);name.setTypeface(null,android.graphics.Typeface.BOLD);
+        if(repo.player!=null && repo.player.email()!=null && !repo.player.email().isBlank())label(words,repo.player.email(),12,secondary);
+        String state=repo.offlineMode?"Hors connexion":repo.sessionRejected?"Session à revalider":"Connecté à Snake N3st";
+        TextView status=label(words,state,12,repo.sessionRejected?0xffffc18a:getResources().getColor(R.color.minebutton_highlight));status.setPadding(0,dp(6),0,0);
+        content.addView(identity);label(content,repo.site().replace("https://",""),12,secondary).setPadding(0,dp(14),0,0);
+        section("Session");
+        if(repo.sessionRejected && !repo.offlineMode) {
+            accountAction("Revalider la session","Réessayer avec la clé enregistrée",android.R.drawable.ic_popup_sync,false,()->idle(()->repo.work("Validation…",repo::refresh)));
+            accountAction("Se reconnecter","Valider cet appareil dans le navigateur",android.R.drawable.ic_menu_myplaces,false,()->idle(repo::login));
+        }
+        accountAction(repo.offlineMode?"Revenir en ligne":"Passer hors connexion",repo.offlineMode?"Actualiser le compte et les modpacks":"Jouer avec les modpacks déjà installés",android.R.drawable.ic_menu_revert,false,()->idle(()->{
+            if(repo.offlineMode)repo.work("Reconnexion…",repo::refresh);else enterOffline();
+        }));
+        section("Sécurité");
+        accountAction(repo.pin.isEnabled()?"Protection par PIN activée":"Protéger avec un PIN",repo.pin.isEnabled()?"Gérer la protection de cet appareil":"Protéger la session et les fichiers sensibles",android.R.drawable.ic_lock_lock,false,()->idle(()->{
+            if(!repo.pin.isEnabled())askPin(true);
+            else new AlertDialog.Builder(this).setTitle("Désactiver le PIN ?")
+                .setMessage("Les fichiers .cryptlist seront déchiffrés et la session restera protégée par Android Keystore.")
+                .setNegativeButton("Annuler",null).setPositiveButton("Désactiver",(d,w)->repo.disablePin()).show();
+        }));
+        accountAction("Se déconnecter","Retirer la session de cet appareil",android.R.drawable.ic_lock_power_off,true,()->idle(()->new AlertDialog.Builder(this)
+            .setTitle("Se déconnecter ?").setMessage(repo.offlineMode?"La session sera supprimée de cet appareil. La clé distante ne pourra pas être révoquée hors connexion.":"La clé de cet appareil sera révoquée sur le site et sa session locale supprimée.")
+            .setNegativeButton("Annuler",null).setPositiveButton("Déconnexion",(d,w)->repo.logout()).show()));
+        section("Launcher");
+        accountAction("Commandes tactiles","Ouvrir l’éditeur Amethyst",android.R.drawable.ic_menu_edit,false,()->startActivity(new Intent(this,CustomControlsActivity.class)));
+        accountAction("Mises à jour du launcher",repo.offlineMode?"Connexion nécessaire":"Rechercher une nouvelle version",android.R.drawable.ic_popup_sync,false,()->{
+            if(repo.offlineMode)notice("Hors connexion","Les mises à jour sont indisponibles hors connexion.");else SnakeUpdater.get(host).check(host,true);
+        });
+        Switch automatic=new Switch(this);automatic.setText("Vérification automatique");automatic.setTextColor(secondary);automatic.setTextSize(13);automatic.setPadding(dp(12),0,dp(12),0);
+        automatic.setChecked(SnakeUpdater.get(host).automatic());automatic.setOnCheckedChangeListener((v,enabled)->SnakeUpdater.get(host).setAutomatic(enabled));content.addView(automatic);
+        accountAction("Signaler un bug","Envoyer un rapport à l’équipe",android.R.drawable.ic_menu_info_details,false,this::reportBug);
+        accountAction("Site Snake N3st","Ouvrir dans le navigateur",android.R.drawable.ic_menu_view,false,()->open(repo.site()));
+        accountAction("Code source et licences","Basé sur Amethyst / PojavLauncher",android.R.drawable.ic_menu_help,false,()->open("https://github.com/Snake-N3st/SnakeN3stLauncher-Android"));
     }
     private void askPin(boolean create) {
         LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20),0,dp(20),0);

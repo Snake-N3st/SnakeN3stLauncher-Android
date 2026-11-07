@@ -16,6 +16,8 @@ public final class SnakeAccountView extends AppCompatTextView {
     private String requestedImage;
     private String requestedBase;
     private boolean requestSet;
+    private long requestedPlayer;
+    private boolean requestedOffline;
     private long generation;
 
     public SnakeAccountView(Context context) { this(context, null); }
@@ -29,16 +31,20 @@ public final class SnakeAccountView extends AppCompatTextView {
     }
 
     /** A stable URL is requested once, including when the server returns an error. */
-    public void setAvatar(String imageUrl, String baseUrl) {
-        if (requestSet && Objects.equals(requestedImage, imageUrl) && Objects.equals(requestedBase, baseUrl)) return;
-        requestSet = true; requestedImage = imageUrl; requestedBase = baseUrl;
+    public void setAvatar(String imageUrl, String baseUrl, long playerId, boolean offline) {
+        if (requestSet && Objects.equals(requestedImage, imageUrl) && Objects.equals(requestedBase, baseUrl) && requestedPlayer==playerId && requestedOffline==offline) return;
+        requestSet = true; requestedImage = imageUrl; requestedBase = baseUrl; requestedPlayer=playerId; requestedOffline=offline;
         long current = ++generation;
-        display(null);
-        if (imageUrl == null || imageUrl.isBlank()) return;
+        var cached=AvatarDiskCache.read(getContext(),baseUrl,playerId);
+        display(cached==null?null:new BitmapDrawable(getResources(),cached));
+        if (offline || imageUrl == null || imageUrl.isBlank()) return;
         WeakReference<SnakeAccountView> reference = new WeakReference<>(this);
         RemoteIconLoader.load(getContext(), imageUrl, baseUrl, drawable -> {
             SnakeAccountView view = reference.get();
-            if (view != null && view.generation == current) view.display(drawable);
+            if (view != null && view.generation == current && drawable != null) {
+                if(drawable instanceof BitmapDrawable bitmap) AvatarDiskCache.save(view.getContext(),baseUrl,playerId,bitmap.getBitmap());
+                view.display(drawable);
+            }
         });
     }
 

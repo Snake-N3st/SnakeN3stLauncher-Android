@@ -55,6 +55,15 @@ public final class RemoteIconLoader {
 
     /** Always invokes callback on the main thread, with null when unavailable or rejected. */
     public static void load(Context context, String imageUrl, String baseUrl, Consumer<Drawable> callback) {
+        load(context,imageUrl,baseUrl,MAX_BYTES,DECODE_DIMENSION,callback);
+    }
+
+    /** Article covers need more detail than toolbar icons, with their own bounded budget. */
+    public static void loadCover(Context context, String imageUrl, String baseUrl, Consumer<Drawable> callback) {
+        load(context,imageUrl,baseUrl,8*1024*1024,1024,callback);
+    }
+
+    private static void load(Context context, String imageUrl, String baseUrl, int maxBytes, int decodeDimension, Consumer<Drawable> callback) {
         Context application = context.getApplicationContext();
         if(SnakeRepository.get(application).offlineMode) { MAIN.post(()->callback.accept(null)); return; }
         Consumer<Bitmap> deliver = bitmap -> MAIN.post(() -> callback.accept(bitmap == null ? null
@@ -62,7 +71,7 @@ public final class RemoteIconLoader {
         final URI uri;
         try { uri = resolve(imageUrl, baseUrl); }
         catch (RuntimeException e) { deliver.accept(null); return; }
-        String key = uri.toASCIIString();
+        String key = decodeDimension+":"+uri.toASCIIString();
         synchronized (LOCK) {
             Bitmap cached = CACHE.get(key);
             if (cached != null) { deliver.accept(cached); return; }
@@ -73,7 +82,7 @@ public final class RemoteIconLoader {
         try {
             WORKERS.execute(() -> {
                 Bitmap bitmap = null;
-                try { if(!SnakeRepository.get(application).offlineMode) bitmap = download(uri); }
+                try { if(!SnakeRepository.get(application).offlineMode) bitmap = download(uri,maxBytes,decodeDimension); }
                 catch (IOException | RuntimeException e) { /* Optional image: retain the placeholder. */ }
                 finish(key, bitmap);
             });
@@ -84,7 +93,7 @@ public final class RemoteIconLoader {
     public static void invalidate(String imageUrl, String baseUrl) {
         try {
             String key = resolve(imageUrl, baseUrl).toASCIIString();
-            synchronized (LOCK) { CACHE.remove(key); }
+            synchronized (LOCK) { CACHE.remove(DECODE_DIMENSION+":"+key); CACHE.remove("1024:"+key); }
         } catch (RuntimeException ignored) { }
     }
 
@@ -107,7 +116,7 @@ public final class RemoteIconLoader {
         if (callbacks != null) for (Consumer<Bitmap> callback : callbacks) callback.accept(bitmap);
     }
 
-    private static Bitmap download(URI start) throws IOException {
+    private static Bitmap download(URI start,int maxBytes,int decodeDimension) throws IOException {
         if(networkDisabled) return null;
         URI uri = start;
         for (int redirect = 0; redirect <= 3; redirect++) {
@@ -128,13 +137,13 @@ public final class RemoteIconLoader {
                     uri = resolve(location, uri.toString());
                     continue;
                 }
-                if (status != 200 || connection.getContentLengthLong() > MAX_BYTES) return null;
+                if (status != 200 || connection.getContentLengthLong() > maxBytes) return null;
                 ByteArrayOutputStream bytes = new ByteArrayOutputStream();
                 try (InputStream input = connection.getInputStream()) {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = input.read(buffer)) != -1) {
                         if (networkDisabled || Thread.currentThread().isInterrupted()) return null;
-                        if (bytes.size() + count > MAX_BYTES) return null;
+                        if (bytes.size() + count > maxBytes) return null;
                         bytes.write(buffer, 0, count);
                     }
                 }
@@ -145,7 +154,7 @@ public final class RemoteIconLoader {
                         || bounds.outHeight > MAX_DIMENSION) return null;
                 BitmapFactory.Options options = new BitmapFactory.Options();
                 options.inSampleSize = 1;
-                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > DECODE_DIMENSION)
+                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > decodeDimension)
                     options.inSampleSize *= 2;
                 return BitmapFactory.decodeByteArray(encoded, 0, encoded.length, options);
             } finally { CONNECTIONS.remove(connection); connection.disconnect(); }

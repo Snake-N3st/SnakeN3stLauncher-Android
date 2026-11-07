@@ -43,7 +43,7 @@ Le script de compilation impose `nice -n 19`, la priorité disque inactive si di
 
 ## Fonctionnalités intégrées
 
-- Connexion par validation dans le navigateur, requêtes Ed25519, avatar carré du joueur et révocation à la déconnexion.
+- Connexion par validation dans le navigateur, requêtes Ed25519, avatar carré du joueur et révocation à la déconnexion. Le dernier avatar reçu est conservé sur disque par compte et par site, et reste affiché hors connexion après redémarrage ; les icônes des modpacks sont récupérées du cache natif Amethyst.
 - Session chiffrée avec une clé non exportable Android Keystore ; sauvegarde Android désactivée. PIN optionnel et fichiers `.cryptlist` protégés.
 - Sélecteur dérivé du menu Amethyst avec les icônes réelles des modpacks. Logos mis en cache durablement dans le format natif des profils Amethyst ; le site contrôle l’icône des profils Snake N3st et son édition manuelle y est désactivée. Catalogue, canaux, version épinglée, installation, mise à jour et réparation. Synchronisation par SHA-256, écritures atomiques, `.filesmetas` et fusion des réglages.
 - Chaîne de confiance des manifestes, mémorisation des certificats et protection contre les retours à une signature absente ou un certificat antérieur.
@@ -52,7 +52,7 @@ Le script de compilation impose `nice -n 19`, la priorité disque inactive si di
 - Instances indépendantes ; mémoire et arguments JVM par modpack. Le jeton est transmis à la JVM en mémoire et n’est pas enregistré dans les profils ni affiché par les journaux du launcher.
 - Installation Vanilla/Fabric/Quilt et raccordement aux installateurs Forge/NeoForge d’Amethyst. Pour Forge/NeoForge, terminer l’installateur puis toucher Jouer à nouveau.
 - Écran de gestion intégré à Amethyst : onglets Instance, Mods et Modrinth, progression des téléchargements, logos embarqués des mods, activation/désactivation et retrait des mods du pack ou personnels, recherche et choix de version compatible, dépendances obligatoires et empreintes vérifiées. Les choix locaux survivent au lancement ; Réparer restaure les mods officiels et conserve les ajouts personnels. Vérification de la blacklist serveur avant lancement et installation d’un ajout. Les dépendances déjà installées sont reconnues par leur empreinte, même si leur nom diffère (`%2B` / `+`).
-- Actualités Azuriom, consultation des articles et formulaire de rapport de bug volontaire.
+- Actualités Azuriom dans un écran Amethyst dédié : article à la une, couvertures, dates et auteurs, cartes accessibles et ouverture dans le navigateur. Panneau de profil avec avatar carré, état de session et sections Sécurité/Launcher. Formulaire de rapport de bug volontaire.
 - Contrôles tactiles, paramètres graphiques et gestion des runtimes d’Amethyst accessibles depuis les paramètres.
 
 Les adaptations propres à Android et les vérifications restant à effectuer figurent dans [docs/PORTAGE.md](docs/PORTAGE.md).
