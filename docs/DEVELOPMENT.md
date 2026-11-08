@@ -190,3 +190,9 @@ adb shell am instrument -w -e deviceProtection true \
 Les 14 contrôles utilisent un alias Keystore temporaire et des fichiers isolés : clé non exportable, authentification requise, types et durée autorisés, corruption, perte de clé, nettoyage et reprise de session. Ils ne demandent aucune authentification personnelle et ne modifient ni le verrouillage du téléphone ni la protection du compte réel.
 
 Le runner `-e deviceAuthUi true` vérifie l’écran protégé sans champ PIN et l’ouverture automatique et l’annulation du dialogue système avec une session factice ; `systemPromptShown=true` confirme le rendu natif. Le dialogue est annulé sans authentification et aucune activation réelle n’est effectuée. Onze contrôles attendus, zéro requête réseau ; capture `cache/sn3-device-auth-ui-check.png`.
+
+## Publications signées localement
+
+La variable GitHub `SN3_RELEASE_MODE=local` désactive la compilation automatique sur les tags `v*`. Ce mode permet de conserver la clé privée de production uniquement sur le poste de publication. Les APK sont compilés avec `scripts/build-sn3.sh`, les variables de signature locales décrites ci-dessus et un `sn3.versionCode` supérieur à celui de la dernière release. La clé et son mot de passe ne doivent jamais être joints à une release ni être ajoutés au dépôt.
+
+Après vérification des signatures et des identifiants des deux APK, générer `android-update.json` avec `scripts/generate-android-update.py`, joindre les APK et le manifeste à un brouillon GitHub, puis publier ce brouillon. La variante debug doit conserver sa signature habituelle pour mettre à jour les installations de test. Retirer `SN3_RELEASE_MODE` réactive le workflow automatique et nécessite alors les secrets de signature GitHub.
