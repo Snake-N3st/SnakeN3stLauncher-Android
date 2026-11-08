@@ -263,9 +263,9 @@ afterEvaluate {
         t.dependsOn(sn3Assets)
     }
 
-    // Needed or else the release builds complain about undeclared dependencies
+    // Lint reads the filtered assets too; include their generation in its dependency graph.
     tasks.matching { it.name.toLowerCase().contains("lint") }.configureEach { t ->
-        t.dependsOn(componentJars)
+        t.dependsOn(sn3Assets)
     }
 }
 
