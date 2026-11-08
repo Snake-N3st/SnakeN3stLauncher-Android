@@ -120,7 +120,7 @@ public final class Sn3GameBridge {
     private static PreparedLaunch prepareLocal(LauncherActivity activity, SnakeRepository r, String slug) throws Exception {
         if (isRunning(activity)) throw new IOException("Un jeu est déjà en cours.");
         r.requireSession();
-        if (r.pin.isEnabled() && r.pinKey == null) throw new IOException("Déverrouille le PIN avant de jouer hors connexion.");
+        if (r.protectionEnabled() && r.pinKey == null) throw new IOException("Déverrouille cet appareil avant de jouer hors connexion.");
         if (!r.isInstalled(slug)) throw new IOException("Installation locale incomplète. Reviens en ligne pour installer ou réparer ce modpack.");
         LocalInstallationFiles.requireInstance(r.instance(slug), new LocalManifestStore().load(r.instance(slug))
                 .orElseThrow(() -> new IOException("Inventaire local manquant.")), r.modChoices(slug));

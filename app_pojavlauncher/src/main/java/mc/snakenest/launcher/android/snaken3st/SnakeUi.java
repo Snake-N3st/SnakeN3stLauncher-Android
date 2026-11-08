@@ -59,7 +59,7 @@ public final class SnakeUi extends ContextWrapper {
         resumed=true; repo.observer=observer;
         if(!restoreAttempted && repo.session==null && repo.store.exists() && !repo.busy) {
             restoreAttempted=true;
-            if(!repo.pin.isEnabled()) repo.unlock(new char[0]);
+            if(!repo.protectionEnabled()) repo.unlock(new char[0]);
         } else if(repo.session!=null && repo.pinKey!=null && !repo.busy && !Sn3GameBridge.isRunning(host)) repo.work("Protection des fichiers…",repo::sealAll);
         render(); SnakeUpdater.get(host).onResume(host);
     }
@@ -205,11 +205,13 @@ public final class SnakeUi extends ContextWrapper {
             if(repo.offlineMode)repo.work("Reconnexion…",repo::refresh);else enterOffline();
         }));
         section("Sécurité");
-        accountAction(repo.pin.isEnabled()?"Protection par PIN activée":"Protéger avec un PIN",repo.pin.isEnabled()?"Gérer la protection de cet appareil":"Protéger la session et les fichiers sensibles",android.R.drawable.ic_lock_lock,false,()->idle(()->{
-            if(!repo.pin.isEnabled())askPin(true);
-            else new AlertDialog.Builder(this).setTitle("Désactiver le PIN ?")
-                .setMessage("Les fichiers .cryptlist seront déchiffrés et la session restera protégée par Android Keystore.")
-                .setNegativeButton("Annuler",null).setPositiveButton("Désactiver",(d,w)->repo.disablePin()).show();
+        boolean androidProtection=repo.deviceProtection.enabled();
+        accountAction(androidProtection?"Protection Android activée":repo.pin.isEnabled()?"Remplacer l’ancien PIN":"Protéger avec Android",
+            androidProtection?"Empreinte ou verrouillage du téléphone":repo.pin.isEnabled()?"Conserver les données et utiliser le déverrouillage du téléphone":"Protéger la session et les fichiers sensibles",android.R.drawable.ic_lock_lock,false,()->idle(()->{
+            if(androidProtection)new AlertDialog.Builder(this).setTitle("Désactiver la protection Android ?")
+                .setMessage("Les fichiers protégés seront déchiffrés. La session restera chiffrée dans Android Keystore, sans demande de déverrouillage du téléphone.")
+                .setNegativeButton("Annuler",null).setPositiveButton("Désactiver",(d,w)->authenticateDevice(repo::disableProtection)).show();
+            else authenticateDevice(repo::enableDeviceProtection);
         }));
         accountAction("Se déconnecter","Retirer la session de cet appareil",android.R.drawable.ic_lock_power_off,true,()->idle(()->new AlertDialog.Builder(this)
             .setTitle("Se déconnecter ?").setMessage(repo.offlineMode?"La session sera supprimée de cet appareil. La clé distante ne pourra pas être révoquée hors connexion.":"La clé de cet appareil sera révoquée sur le site et sa session locale supprimée.")
@@ -227,15 +229,12 @@ public final class SnakeUi extends ContextWrapper {
         accountAction("Site Snake N3st","Ouvrir dans le navigateur",android.R.drawable.ic_menu_view,false,()->open(repo.site()));
         accountAction("Code source et licences","Basé sur Amethyst / PojavLauncher",android.R.drawable.ic_menu_help,false,()->open("https://github.com/Snake-N3st/SnakeN3stLauncher-Android"));
     }
-    private void askPin(boolean create) {
-        LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20),0,dp(20),0);
-        EditText pin = field(form,"PIN (4 à 12 chiffres)","", android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        EditText confirm = create ? field(form,"Confirmer le PIN","",android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD) : null;
-        new AlertDialog.Builder(this).setTitle(create?"Créer un PIN":"Déverrouiller le compte").setView(form).setNegativeButton("Annuler",null).setPositiveButton("Valider",(d,w) -> {
-            String value = pin.getText().toString();
-            if (create && !value.equals(confirm.getText().toString())) { notice("PIN invalide","Les codes ne correspondent pas."); return; }
-            if (create) repo.setPin(value.toCharArray()); else repo.unlock(value.toCharArray());
-        }).show();
+    private void authenticateDevice(Runnable action) {
+        if(accountDialog!=null)accountDialog.dismiss();
+        try {
+            repo.deviceProtection.prepare();
+            DeviceAuthFragment.authenticate(host,action,message->{if(!host.isFinishing()&&!host.isDestroyed())notice("Déverrouillage Android",message);});
+        }catch(Exception failure){notice("Déverrouillage Android indisponible","Vérifie le verrouillage de ton téléphone dans les paramètres Android, puis réessaie. La protection existante est conservée.");}
     }
     private void reportBug() {
         if(repo.offlineMode) { notice("Hors connexion","L’envoi de rapports nécessite une connexion au site."); return; }

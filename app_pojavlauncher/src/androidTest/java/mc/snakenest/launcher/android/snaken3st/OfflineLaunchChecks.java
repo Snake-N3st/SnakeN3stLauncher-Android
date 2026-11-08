@@ -40,7 +40,7 @@ public final class OfflineLaunchChecks {
             Tools.initStorageConstants(target); LauncherPreferences.loadPreferences(target);
             repo=SnakeRepository.get(target);
             if(repo.busy) throw new Blocked("Une opération est déjà en cours.");
-            if(repo.pin.isEnabled()) throw new Blocked("PIN activé : déverrouillage manuel requis, aucun PIN n’est lu par ce test.");
+            if(repo.protectionEnabled()) throw new Blocked("Protection activée : déverrouillage manuel requis, aucun code n’est lu par ce test.");
             oldOffline=repo.offlineMode; oldAvailable=repo.offlineAvailable; oldRejected=repo.sessionRejected;
             oldSession=repo.session; oldPacks=repo.packs; oldRemoved=repo.removedPacks;
             repo.session=repo.store.load(repo.site(),repo.client(),null);

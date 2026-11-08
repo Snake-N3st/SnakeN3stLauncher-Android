@@ -23,7 +23,7 @@ Connectez votre compte Snake N3st, choisissez un modpack et retrouvez ses mods, 
 
 | | Fonctionnalités |
 | --- | --- |
-| **Compte** | Écran de connexion dédié, validation dans le navigateur, avatar carré, panneau de profil et protection par PIN optionnelle. Un même compte peut être utilisé sur plusieurs appareils. |
+| **Compte** | Écran de connexion dédié, validation dans le navigateur, avatar carré, panneau de profil et protection optionnelle par empreinte ou verrouillage du téléphone. Un même compte peut être utilisé sur plusieurs appareils. |
 | **Modpacks** | Catalogue Snake N3st, sélecteur Amethyst avec les vraies icônes, choix du canal et de la version, installation, réparation et désinstallation. |
 | **Mods** | Catalogue populaire Modrinth, fiches avec auteur et icône, installation rapide, versions et compatibilité, identification des mods installés, activation, retrait, import de fichiers `.jar` et confirmation des dépendances. |
 | **Téléchargements** | Téléchargement des fichiers du pack par lots ; fichiers Minecraft et Java téléchargés en parallèle, vérification des empreintes Minecraft et progression du transfert. |
@@ -63,11 +63,17 @@ Après une erreur de requête, choisissez **Passer hors connexion**. Cette actio
 
 - Les modpacks entièrement installés peuvent être lancés sans synchronisation ni téléchargement.
 - La session sauvegardée est transmise au jeu comme d’habitude. Si sa clé a expiré et qu’un serveur la refuse, reconnectez-vous dans le launcher puis relancez le jeu.
-- Le PIN reste nécessaire lorsqu’il est activé. Les avatars et les icônes déjà chargés restent disponibles après redémarrage.
+- Le déverrouillage Android reste nécessaire lorsque la protection est activée. Les avatars et les icônes déjà chargés restent disponibles après redémarrage.
 - Un pack installé mais absent du dernier catalogue reçu reste visible avec la mention **Retiré du site**. Il peut encore être lancé pour retrouver, par exemple, un monde solo ; sa réparation et ses téléchargements sont désactivés.
 - Une installation incomplète reste visible et doit être terminée en ligne avant de jouer. Les actualités, téléchargements et recherches de mises à jour nécessitent une connexion.
 
 Pour reprendre la synchronisation, choisissez **Revenir en ligne**.
+
+### Protéger cet appareil
+
+Depuis le panneau du profil, choisissez **Protéger avec Android**. Android 11 et les versions suivantes proposent une biométrie forte compatible (par exemple l’empreinte) ou le code, schéma ou mot de passe du téléphone. Android 8 à 10 utilisent le verrouillage du téléphone. Le launcher ne reçoit jamais votre code ni votre empreinte.
+
+La session et les fichiers sensibles restent chiffrés. Si un ancien PIN du launcher est activé, déverrouillez-le puis choisissez **Remplacer l’ancien PIN** dans le profil : la même clé est conservée, sans réinitialiser vos données. La désactivation de la protection nécessite une nouvelle authentification Android. Configurez un verrouillage d’écran avant d’activer cette option.
 
 ### Java et compatibilité
 
@@ -124,7 +130,7 @@ Dans **Paramètres → Divers**, le réglage **Téléchargements simultanés du 
 
 Pour une question ou un problème en jeu, rejoignez le [Discord Snake N3st](https://discord.gg/wCJZpreVDj). L’application propose aussi **Signaler un bug** depuis le panneau du compte.
 
-Pour contribuer, ouvrez une issue ou une pull request en précisant le modèle de l’appareil, la version d’Android, le modpack et les étapes de reproduction. Ne publiez jamais votre PIN, une clé de session ou un journal contenant un jeton d’authentification.
+Pour contribuer, ouvrez une issue ou une pull request en précisant le modèle de l’appareil, la version d’Android, le modpack et les étapes de reproduction. Ne publiez jamais votre code de verrouillage, une clé de session ou un journal contenant un jeton d’authentification.
 
 ## Crédits et licences
 

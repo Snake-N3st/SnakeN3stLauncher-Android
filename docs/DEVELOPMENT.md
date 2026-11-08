@@ -34,7 +34,7 @@ La résolution utilise les valeurs globales actuelles à chaque lancement, en li
 
 ## Session et données locales
 
-La clé de session est chiffrée avec Android Keystore, complétée par le PIN lorsqu’il est activé. La sauvegarde Android est désactivée. Le jeton du jeu est transmis en mémoire ; il ne doit jamais être enregistré dans un profil ni apparaître dans les journaux du launcher.
+La clé de session est chiffrée avec Android Keystore, complétée par une clé de coffre enveloppée avec une clé Android Keystore soumise à authentification utilisateur lorsque la protection Android est activée. La sauvegarde Android est désactivée. Le jeton du jeu est transmis en mémoire ; il ne doit jamais être enregistré dans un profil ni apparaître dans les journaux du launcher.
 
 Le catalogue et les métadonnées de lancement sont conservés séparément de la clé de session. Les images mises en cache ne contiennent aucun jeton : les avatars sont isolés par site et par compte, et les logos des modpacks utilisent le format natif Amethyst. Une erreur réseau ne doit ni effacer la session ni faire passer artificiellement tout le catalogue en « Retiré du site ».
 
@@ -118,7 +118,7 @@ adb shell am instrument -w -e offline true \
   mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
 ```
 
-Ce contrôle utilise une session et un modpack déjà installés. Il vérifie la préparation locale, la conservation de la clé et la présence d’un pack retiré du catalogue, sans lancer Minecraft ni télécharger ses fichiers. Le réseau est refusé pour le processus de test ; les métadonnées et préférences temporairement modifiées sont restaurées. Si un PIN est activé ou si les prérequis locaux manquent, le runner indique `blocked=true` au lieu de les contourner.
+Ce contrôle utilise une session et un modpack déjà installés. Il vérifie la préparation locale, la conservation de la clé et la présence d’un pack retiré du catalogue, sans lancer Minecraft ni télécharger ses fichiers. Le réseau est refusé pour le processus de test ; les métadonnées et préférences temporairement modifiées sont restaurées. Si une protection est activée ou si les prérequis locaux manquent, le runner indique `blocked=true` au lieu de les contourner.
 
 ### Vérification des APK de mise à jour
 
@@ -175,3 +175,18 @@ adb shell am instrument -w -e newsUi true \
 ```
 
 Ces deux contrôles utilisent des dépôts, préférences et comptes fictifs isolés. Ils vérifient le catalogue, les fiches, les versions incompatibles et la navigation arrière, puis la barre Actualités, la restauration de l’en-tête et l’absence du raccourci tactile dans le profil. Aucun mod n’est installé et aucune connexion distante n’est autorisée. Captures dans le cache privé : `sn3-mods-catalogue-check.png`, `sn3-mods-detail-check.png`, `sn3-mods-versions-check.png` et `sn3-news-toolbar-check.png`.
+
+## Authentification système Android
+
+`AndroidDeviceProtection` enveloppe la clé de coffre AES-256 avec une clé Android Keystore non exportable et soumise à authentification utilisateur. Android 11+ autorise `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` ; Android 8–10 utilise la confirmation du verrouillage du téléphone. La fenêtre d’autorisation des opérations Keystore est de 30 secondes. La clé déballée reste en mémoire pour la session déverrouillée, comme l’ancienne clé dérivée du PIN.
+
+La migration enveloppe la même clé de coffre : pas de changement de clé des fichiers `.sn3enc`. L’ancien PIN n’est supprimé qu’après écriture de l’enveloppe authentifiée. La première activation écrit l’enveloppe avant la session ; en cas d’arrêt entre ces écritures, la récupération de l’ancienne session n’est effectuée qu’après déverrouillage Android et la session est immédiatement réenregistrée sous la clé de coffre. Un blob corrompu ou une clé Keystore perdue ne provoque jamais une régénération silencieuse ni la suppression des fichiers protégés. Retirer le verrouillage système ou effacer les données peut rendre une clé Keystore inutilisable.
+
+```bash
+adb shell am instrument -w -e deviceProtection true \
+  mc.snakenest.launcher.android.debug.test/mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation
+```
+
+Les 14 contrôles utilisent un alias Keystore temporaire et des fichiers isolés : clé non exportable, authentification requise, types et durée autorisés, corruption, perte de clé, nettoyage et reprise de session. Ils ne demandent aucune authentification personnelle et ne modifient ni le verrouillage du téléphone ni la protection du compte réel.
+
+Le runner `-e deviceAuthUi true` vérifie l’écran protégé sans champ PIN et l’annulation du dialogue système avec une opération factice ; `systemPromptShown=true` confirme le rendu natif. Le succès ne déclenche aucun déverrouillage réel ni activation. Dix contrôles attendus, zéro requête réseau ; capture `cache/sn3-device-auth-ui-check.png`.

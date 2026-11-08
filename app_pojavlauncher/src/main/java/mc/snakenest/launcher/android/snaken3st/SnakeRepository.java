@@ -25,6 +25,7 @@ final class SnakeRepository {
     final AppDirs dirs;
     final AndroidSessionStore store;
     final PinProtection pin;
+    final AndroidDeviceProtection deviceProtection;
     final HttpJsonClient http = new HttpJsonClient();
     final ExecutorService executor = Executors.newSingleThreadExecutor();
     final Handler main = new Handler(Looper.getMainLooper());
@@ -50,7 +51,7 @@ final class SnakeRepository {
     private SnakeRepository(Context c) {
         context = c; prefs = c.getSharedPreferences("sn3", Context.MODE_PRIVATE);
         dirs = new AppDirs(c.getNoBackupFilesDir().toPath().resolve("snake-n3st"));
-        store = new AndroidSessionStore(c); pin = new PinProtection(dirs);
+        store = new AndroidSessionStore(c); pin = new PinProtection(dirs);deviceProtection=new AndroidDeviceProtection(dirs);
         catalog = new LocalPackCatalogStore(dirs.root().resolve("local-pack-catalog.json"), site());
     }
     String site() { return BuildConfig.SN3_BASE_URL; }
@@ -89,8 +90,10 @@ final class SnakeRepository {
         });
     }
     void cancel() { cancellationRequested = true; Thread t = worker; if (t != null) t.interrupt(); }
+    boolean protectionEnabled(){return deviceProtection.enabled()||pin.isEnabled();}
     void unlock(char[] code) { work("Déverrouillage…", () -> {
-        try { SecretKey key = pin.isEnabled() ? pin.deriveExisting(code) : null;
+        try { if(deviceProtection.enabled())throw new IllegalStateException("Utilise le déverrouillage Android.");
+            SecretKey key = pin.isEnabled() ? pin.deriveExisting(code) : null;
             if (key != null) {
                 byte[] check = SecretBox.decrypt(key, Files.readAllBytes(dirs.secure().resolve("pin-check.bin")));
                 if (!Arrays.equals(check, new byte[]{83,78,51})) throw new IllegalStateException("PIN incorrect");
@@ -102,7 +105,7 @@ final class SnakeRepository {
         } finally { Arrays.fill(code, '\0'); }
     }); }
     void login() { work("Connexion en cours…", () -> {
-        if (pin.isEnabled() && pinKey == null) throw new IllegalStateException("Déverrouille le PIN avant de te connecter.");
+        if (protectionEnabled() && pinKey == null) throw new IllegalStateException("Déverrouille cet appareil avant de te connecter.");
         if (client().isBlank()) throw new IllegalStateException("Ce build ne définit pas sn3.clientId. Recompile avec -Psn3.clientId=…");
         String challenge = auth().requestChallenge(client());
         loginUrl = auth().loginUrl(challenge).toString(); changed();
@@ -347,30 +350,55 @@ final class SnakeRepository {
             }
         }
     }
-    void disablePin() { work("Suppression du PIN…", () -> {
-        requireSession(); if (pinKey == null) throw new IllegalStateException("Déverrouille d’abord le compte.");
-        if (Files.isDirectory(dirs.instances())) try (var children = Files.list(dirs.instances())) {
-            for (Path dir : children.filter(Files::isDirectory).toList()) {
-                SensitiveFileVault.decryptAll(dir, pinKey);
-                try (var files = Files.walk(dir)) {
-                    if (files.anyMatch(f -> f.getFileName().toString().endsWith(".sn3enc")))
-                        throw new IllegalStateException("Un fichier protégé ne peut pas être déchiffré. Le PIN est conservé.");
+    void unlockDevice(){work("Déverrouillage Android…",()->{
+        if(!deviceProtection.enabled())throw new IllegalStateException("Protection Android non activée.");
+        SecretKey key=deviceProtection.unwrap();
+        // Both atomic files survive interruption: finish a pending fresh activation only after auth.
+        PlayerSession restored=store.loadAfterDeviceAuthentication(site(),client(),key);
+        if(restored!=null)store.save(restored,site(),key);
+        pinKey=key;session=restored;
+        if(session!=null){restoreLocalCatalog();offlineAvailable=true;}
+        sealAll();if(session!=null)refresh();
+    });}
+    void enableDeviceProtection(){work("Protection Android…",()->{
+        requireSession();if(deviceProtection.enabled())throw new IllegalStateException("La protection Android est déjà activée.");
+        if(Sn3GameBridge.isRunning(context))throw new IllegalStateException("Ferme Minecraft avant de modifier la protection.");
+        boolean legacy=pin.isEnabled();
+        if(legacy&&pinKey==null)throw new IllegalStateException("Déverrouille d’abord l’ancien PIN.");
+        SecretKey key=legacy?pinKey:AndroidDeviceProtection.newVaultKey();
+        deviceProtection.wrap(key); // Auth-bound Keystore operation; a UI success flag alone is insufficient.
+        if(!legacy)try{store.save(session,site(),key);}catch(Exception failure){
+            // Restore the original storage mode before removing the only wrapped copy of the key.
+            store.save(session,site(),null);deviceProtection.clear();throw failure;
+        }
+        pinKey=key;
+        if(legacy){
+            pin.disable();
+            if(pin.isEnabled()){deviceProtection.clear();throw new java.io.IOException("La migration n’a pas pu retirer l’ancien PIN. Sa protection et les données sont conservées.");}
+            try{Files.deleteIfExists(dirs.secure().resolve("pin-check.bin"));}catch(java.io.IOException ignored){}
+        }
+        sealAll();
+    });}
+    void disableProtection(){work("Désactivation de la protection…",()->{
+        requireSession();
+        if(Sn3GameBridge.isRunning(context))throw new IllegalStateException("Ferme Minecraft avant de modifier la protection.");
+        // Disabling an active Android protection requires another authenticated Keystore access.
+        SecretKey key=deviceProtection.enabled()?deviceProtection.unwrap():pinKey;
+        if(key==null)throw new IllegalStateException("Déverrouille d’abord le compte.");
+        if(Files.isDirectory(dirs.instances()))try(var children=Files.list(dirs.instances())){
+            for(Path dir:children.filter(Files::isDirectory).toList()){
+                SensitiveFileVault.decryptAll(dir,key);
+                try(var files=Files.walk(dir)){
+                    if(files.anyMatch(f->f.getFileName().toString().endsWith(".sn3enc")))
+                        throw new IllegalStateException("Un fichier protégé ne peut pas être déchiffré. La protection est conservée.");
                 }
             }
         }
-        store.save(session, site(), null); pin.disable();
-        if (pin.isEnabled()) { store.save(session, site(), pinKey); throw new java.io.IOException("Le PIN n’a pas pu être désactivé."); }
-        Files.deleteIfExists(dirs.secure().resolve("pin-check.bin")); pinKey = null;
-    }); }
-    void setPin(char[] code) { work("Protection du compte…", () -> {
-        try {
-            requireSession(); if (pin.isEnabled()) throw new IllegalStateException("Le PIN est déjà activé.");
-            SecretKey key = pin.enable(code);
-            try {
-                AtomicFiles.write(dirs.secure().resolve("pin-check.bin"), SecretBox.encrypt(key, new byte[]{83,78,51}));
-                store.save(session, site(), key);
-            } catch (Exception e) { pin.disable(); Files.deleteIfExists(dirs.secure().resolve("pin-check.bin")); throw e; }
-            pinKey = key; sealAll();
-        } finally { Arrays.fill(code, '\0'); }
-    }); }
+        store.save(session,site(),null);
+        try{
+            pin.disable();if(pin.isEnabled())throw new java.io.IOException("L’ancienne protection n’a pas pu être supprimée.");
+            if(deviceProtection.enabled())deviceProtection.clear();
+        }catch(Exception failure){store.save(session,site(),key);pinKey=key;sealAll();throw failure;}
+        pinKey=null;try{Files.deleteIfExists(dirs.secure().resolve("pin-check.bin"));}catch(java.io.IOException ignored){}
+    });}
 }

@@ -18,7 +18,7 @@ import mc.snakenest.launcher.android.R;
 import mc.snakenest.launcher.android.Tools;
 import java.util.Arrays;
 
-/** Snake sign-in and local PIN restoration, independent of the home fragment's lifecycle. */
+/** Snake sign-in and Android device authentication, with legacy PIN migration support. */
 public final class Sn3LoginFragment extends Fragment {
     public static final String TAG="Sn3Login";
     private SnakeRepository repo;
@@ -62,7 +62,7 @@ public final class Sn3LoginFragment extends Fragment {
         LinearLayout card=column();card.setPadding(dp(22),dp(22),dp(22),dp(18));card.setBackground(rounded(color(R.color.background_status_bar),20));column.addView(card,new LinearLayout.LayoutParams(-1,-2));
         heading=text("Connexion Snake N3st",21,color(R.color.primary_text));heading.setTypeface(null,Typeface.BOLD);card.addView(heading);
         description=text("Valide cet appareil dans ton navigateur, puis reviens ici. Aucun mot de passe du site à saisir dans le launcher.",14,color(R.color.secondary_text));description.setPadding(0,dp(10),0,dp(16));card.addView(description);
-        pin=new EditText(requireContext());pin.setHint("PIN de cet appareil");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setSingleLine(true);pin.setMaxLines(1);pin.setSaveEnabled(false);card.addView(pin,new LinearLayout.LayoutParams(-1,-2));
+        pin=new EditText(requireContext());pin.setHint("Ancien PIN du launcher");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setSingleLine(true);pin.setMaxLines(1);pin.setSaveEnabled(false);card.addView(pin,new LinearLayout.LayoutParams(-1,-2));
         progress=new ProgressBar(requireContext(),null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);card.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
         status=text("",13,color(R.color.secondary_text));status.setPadding(0,dp(10),0,dp(8));status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);card.addView(status);
         error=text("",13,0xffffaaaa);error.setPadding(0,dp(6),0,dp(8));error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);card.addView(error);
@@ -102,16 +102,17 @@ public final class Sn3LoginFragment extends Fragment {
     private void render() {
         if(connect==null)return;
         if(repo.session!=null&&!repo.busy){goHome();return;}
-        boolean saved=repo.store.exists(),locked=repo.pin.isEnabled()&&repo.pinKey==null;
+        boolean saved=repo.store.exists(),locked=repo.protectionEnabled()&&repo.pinKey==null;
+        boolean androidProtection=repo.deviceProtection.enabled();
         boolean waiting=repo.busy&&repo.loginUrl!=null;
         heading.setText(locked?"Déverrouiller le launcher":saved?"Retrouver ta session":"Connexion Snake N3st");
-        description.setText(locked?"Ta session est enregistrée sur cet appareil. Déverrouille-la avec ton PIN pour retrouver tes modpacks.":saved?"Retrouve la session enregistrée sur cet appareil.":"Valide cet appareil dans ton navigateur, puis reviens ici. Aucun mot de passe du site à saisir dans le launcher.");
-        pin.setVisibility(locked?View.VISIBLE:View.GONE);pin.setEnabled(!repo.busy);
+        description.setText(locked?androidProtection?"Déverrouille ta session avec l’authentification Android : empreinte ou code, schéma ou mot de passe du téléphone.":"Déverrouille avec l’ancien PIN du launcher. Tu pourras le remplacer par le déverrouillage Android depuis ton profil.":saved?"Retrouve la session enregistrée sur cet appareil.":"Valide cet appareil dans ton navigateur, puis reviens ici. Aucun mot de passe du site à saisir dans le launcher.");
+        pin.setVisibility(locked&&!androidProtection?View.VISIBLE:View.GONE);pin.setEnabled(!repo.busy);
         progress.setVisibility(repo.busy?View.VISIBLE:View.GONE);
         String state=repo.busy?repo.cancellationRequested?"Annulation…":waiting?"Valide la connexion dans le navigateur. Le launcher attend ta confirmation.":repo.status:"Annulé".equals(repo.status)?"Connexion annulée. Tu peux réessayer.":"";
         status.setText(state);status.setVisibility(state.isBlank()?View.GONE:View.VISIBLE);
         String failure=browserError!=null?browserError:repo.error;error.setText(failure);error.setVisibility(failure==null?View.GONE:View.VISIBLE);
-        connect.setText(repo.busy?waiting?"Validation en attente…":"Préparation…":locked?"Déverrouiller ma session":saved?"Restaurer ma session":repo.error==null?"Se connecter avec Snake N3st":"Réessayer la connexion");
+        connect.setText(repo.busy?waiting?"Validation en attente…":"Préparation…":locked?androidProtection?"Déverrouiller avec Android":"Déverrouiller avec l’ancien PIN":saved?"Restaurer ma session":repo.error==null?"Se connecter avec Snake N3st":"Réessayer la connexion");
         connect.setEnabled(!repo.busy);
         secondary.setText(waiting?"Ouvrir le navigateur":"Se connecter à un autre compte");
         secondary.setVisibility(waiting || !repo.busy&&saved&&!locked ? View.VISIBLE:View.GONE);secondary.setEnabled(!repo.busy || !repo.cancellationRequested);
@@ -123,7 +124,9 @@ public final class Sn3LoginFragment extends Fragment {
     private void connect() {
         if(repo.busy||Sn3GameBridge.isRunning(requireContext()))return;
         browserError=null;
-        if(repo.pin.isEnabled()&&repo.pinKey==null) {
+        if(repo.deviceProtection.enabled()&&repo.pinKey==null) {
+            DeviceAuthFragment.authenticate(requireActivity(),repo::unlockDevice,message->{if(isAdded()){browserError=message;render();}});
+        } else if(repo.pin.isEnabled()&&repo.pinKey==null) {
             char[] code=new char[pin.length()];pin.getText().getChars(0,pin.length(),code,0);pin.setText("");
             if(code.length<4||code.length>12){Arrays.fill(code,'\0');browserError="Le PIN doit contenir entre 4 et 12 chiffres.";render();return;}
             repo.unlock(code);

@@ -40,16 +40,26 @@ final class AndroidSessionStore {
         System.arraycopy(c.getIV(), 0, blob, 0, 12); System.arraycopy(encrypted, 0, blob, 12, encrypted.length);
         AtomicFiles.write(file, blob); Arrays.fill(data, (byte) 0);
     }
-    PlayerSession load(String site, String client, SecretKey pinKey) throws Exception {
+    PlayerSession load(String site,String client,SecretKey pinKey)throws Exception{return load(site,client,pinKey,false);}
+    /** Only after authenticated AndroidDeviceProtection.unwrap: recover interrupted activation. */
+    PlayerSession loadAfterDeviceAuthentication(String site,String client,SecretKey key)throws Exception{return load(site,client,key,true);}
+    private PlayerSession load(String site, String client, SecretKey pinKey,boolean recoverActivation) throws Exception {
         if (!exists()) return null;
         byte[] blob = Files.readAllBytes(file);
         if (blob.length < 28) throw new java.io.IOException("Session endommagée");
         Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.DECRYPT_MODE, wrappingKey(), new GCMParameterSpec(128, Arrays.copyOf(blob, 12)));
         byte[] data = c.doFinal(blob, 12, blob.length - 12);
-        if (pinKey != null) data = SecretBox.decrypt(pinKey, data);
-        Stored stored = gson.fromJson(new String(data, java.nio.charset.StandardCharsets.UTF_8), Stored.class);
-        Arrays.fill(data, (byte) 0);
+        if(pinKey!=null)try{data=SecretBox.decrypt(pinKey,data);}
+        catch(java.security.GeneralSecurityException failure){if(!recoverActivation)throw failure;
+            // Only a valid outer-authenticated, site/client-matching plaintext session can recover.
+            // A protected session with a wrong key still fails JSON/schema validation below.
+        }
+        Stored stored;
+        try{stored=gson.fromJson(new String(data,java.nio.charset.StandardCharsets.UTF_8),Stored.class);}
+        catch(RuntimeException invalid){throw new java.io.IOException("Session invalide",invalid);}
+        finally{Arrays.fill(data,(byte)0);}
+        if(stored==null||stored.seed()==null||stored.playerId()<=0)throw new java.io.IOException("Session invalide");
         if (!site.equals(stored.site()) || !client.equals(stored.clientId())) throw new java.io.IOException("La session appartient à un autre site/client");
         return new PlayerSession(Ed25519KeyPair.fromSeedHex(stored.seed()), stored.playerId(), client);
     }

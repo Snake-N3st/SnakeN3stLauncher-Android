@@ -25,6 +25,8 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private boolean crashReportChecks;
     private boolean modBrowserChecks;
     private boolean newsUiChecks;
+    private boolean deviceProtectionChecks;
+    private boolean deviceAuthUiChecks;
     @Override public void onCreate(Bundle arguments) {
         offlineChecks=arguments!=null && "true".equals(arguments.getString("offline"));
         iconCacheChecks=arguments!=null && "true".equals(arguments.getString("iconCache"));
@@ -33,12 +35,16 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
         newsUiChecks=arguments!=null && "true".equals(arguments.getString("newsUi"));
         crashReportChecks=arguments!=null && "true".equals(arguments.getString("crashReport"));
         modBrowserChecks=arguments!=null && "true".equals(arguments.getString("modBrowser"));
+        deviceProtectionChecks=arguments!=null && "true".equals(arguments.getString("deviceProtection"));
+        deviceAuthUiChecks=arguments!=null && "true".equals(arguments.getString("deviceAuthUi"));
         super.onCreate(arguments);
         start();
     }
 
     @Override public void onStart() {
         super.onStart();
+        if(deviceAuthUiChecks) { DeviceAuthUiChecks.run(this); return; }
+        if(deviceProtectionChecks) { DeviceProtectionChecks.run(this); return; }
         if(offlineChecks) { new OfflineLaunchChecks(this).run(); return; }
         if(iconCacheChecks) { IconCacheChecks.run(this); return; }
         if(jvmSettingsChecks) { JvmSettingsChecks.run(this); return; }
