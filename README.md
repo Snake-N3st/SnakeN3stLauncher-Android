@@ -1,153 +1,139 @@
-<h1 align="center">Angel Aura Amethyst</h1>
+<p align="center">
+  <img src="app_pojavlauncher/src/main/res/drawable-nodpi/sn3_logo.png" width="104" height="104" alt="Logo Snake N3st">
+</p>
 
-<img src="https://github.com/AngelAuraMC/Amethyst-Android/blob/v3_openjdk/app_pojavlauncher/src/main/assets/amethyst.png" align="left" width="130" height="130" alt="Amethyst logo">
+<h1 align="center">Snake N3st Launcher · Android</h1>
 
-[![Android CI](https://github.com/AngelAuraMC/Amethyst-Android/workflows/Android%20CI/badge.svg)](https://github.com/AngelAuraMC/Amethyst-Android/actions)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/AngelAuraMC/Amethyst-Android)](https://github.com/AngelAuraMC/Amethyst-Android/actions)
-[![Crowdin](https://badges.crowdin.net/pojavlauncher/localized.svg)](https://crowdin.com/project/pojavlauncher)
-[![Discord](https://img.shields.io/discord/724163890803638273.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/5ptqkyZxEy)
+<p align="center">
+  Les modpacks Snake N3st sur Android, avec l’interface et le moteur d’Amethyst.
+</p>
 
-*From [Boardwalk](https://github.com/zhuowei/Boardwalk)'s ashes and [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)'s ruined reputation, here comes Amethyst!*
+<p align="center">
+  <a href="https://snake-n3st.fr">Site</a> ·
+  <a href="https://discord.gg/wCJZpreVDj">Discord</a> ·
+  <a href="https://github.com/Snake-N3st/SnakeN3stLauncher-Android/releases">Versions</a> ·
+  <a href="https://github.com/Snake-N3st/SnakeN3stLauncher">Launcher PC</a>
+</p>
 
-Amethyst is a launcher that allows you to play Minecraft: Java Edition on your Android and [iOS](https://github.com/AngelAuraMC/Amethyst-iOS) devices.
+Connectez votre compte Snake N3st, choisissez un modpack et retrouvez ses mods, ses réglages et ses fichiers sur votre téléphone. Le launcher s’appuie sur [Amethyst](https://github.com/AngelAuraMC/Amethyst-Android) pour exécuter Minecraft Java Edition et gérer les commandes tactiles, les moteurs de rendu et les runtimes Java.
 
-For more details, check out our [wiki](https://wiki.angelauramc.dev)!
+**Android 8.0 minimum · Java à la demande · Interface en français · Mode hors connexion**
 
-## Table of Contents
+## Ce que propose le launcher
 
-* [Introduction](#introduction)
-* [Getting Amethyst](#getting-amethyst)
-* [Building](#building)
-    * [Quick Build (Recommended)](#quick-build-recommended)
-    * [Detailed Build](#detailed-build)
-* [Current Status](#current-status)
-* [Known Issues](#known-issues)
-* [FAQ](#faq)
-* [Contributing](#contributing)
-* [Support](#support)
-* [License](#license)
-* [Credits & Dependencies](#credits--dependencies)
-* [Roadmap](#roadmap)
+| | Fonctionnalités |
+| --- | --- |
+| **Compte** | Écran de connexion dédié, validation dans le navigateur, avatar carré, panneau de profil et protection optionnelle par empreinte ou verrouillage du téléphone. Un même compte peut être utilisé sur plusieurs appareils. |
+| **Modpacks** | Catalogue Snake N3st, sélecteur Amethyst avec les vraies icônes, choix du canal et de la version, installation, réparation et désinstallation. |
+| **Mods** | Catalogue populaire Modrinth, fiches avec auteur et icône, installation rapide, versions et compatibilité, identification des mods installés, activation, retrait, import de fichiers `.jar` et confirmation des dépendances. |
+| **Téléchargements** | Téléchargement des fichiers du pack par lots ; fichiers Minecraft et Java téléchargés en parallèle, vérification des empreintes Minecraft et progression du transfert. |
+| **Hors connexion** | Lancement des packs déjà installés avec la session sauvegardée ; avatars et icônes restent disponibles depuis leur cache sur disque. |
+| **Actualités** | Articles illustrés, date et auteur, avec ouverture dans le navigateur. |
+| **Mises à jour** | Recherche automatique ou manuelle des versions publiées ; vérification de l’APK avant confirmation de l’installation par Android. |
+| **Rapports de plantage** | Contexte du lancement et journaux consultables, copie, export, partage et envoi volontaire à l’équipe. Le dernier rapport reste accessible dans les paramètres. |
+| **Jeu** | Réglages par modpack, mémoire et arguments JVM, contrôles tactiles et paramètres Amethyst. |
 
-## Introduction
+## Installer et jouer
 
-* Amethyst is a Minecraft: Java Edition launcher for Android and iOS based on [Boardwalk](https://github.com/zhuowei/Boardwalk) and [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
-* This launcher can launch almost all available Minecraft versions ranging from rd-132211 to 26.3-snapshot-1.
-* Modding via Forge and Fabric are also supported.
-* This repository contains source code for Android. For iOS/iPadOS, check out [Amethyst-iOS](https://github.com/AngelAuraMC/Amethyst-iOS).
+1. Consultez les [versions publiées](https://github.com/Snake-N3st/SnakeN3stLauncher-Android/releases) pour récupérer un APK. Les builds de développement sont accessibles dans les artifacts du workflow [Android APK](https://github.com/Snake-N3st/SnakeN3stLauncher-Android/actions/workflows/android.yml).
+2. Installez l’APK, puis ouvrez **Snake N3st Launcher**. Android peut demander d’autoriser l’installation depuis la source utilisée.
+3. Connectez votre compte : validez la demande dans le navigateur, puis revenez dans l’application.
+4. Choisissez un modpack et touchez **Installer**. Le runtime Java nécessaire est téléchargé si aucun runtime installé ne convient. Une fois l’installation terminée, le bouton devient **Jouer**.
+5. Utilisez l’écran de gestion du pack pour régler la mémoire, gérer ses mods ou réparer son installation.
 
-## Getting Amethyst
+La version de production et la version de test utilisent des identifiants distincts : `mc.snakenest.launcher.android` et `mc.snakenest.launcher.android.debug`. Elles peuvent cohabiter avec Amethyst, et chacune conserve ses propres données.
 
-You can get Amethyst via two methods:
+### Vos mods et vos fichiers
 
-1. **Releases:** Download the latest prebuilt app from [nightly.link](https://nightly.link/AngelAuraMC/Amethyst-Android/workflows/android/v3_openjdk/app-debug%20%28recommended%29.zip) or select an older version from our [automatic builds](https://github.com/AngelAuraMC/Amethyst-Android/actions).
-2. **Build from Source:** Follow the [building instructions](#building) below.
+Chaque modpack dispose de son propre répertoire de jeu. Les changements effectués dans l’onglet **Mods** sont conservés lors des lancements suivants. **Réparer** restaure les mods officiels du pack et conserve les ajouts personnels.
 
-## Building
+**Désinstaller supprime l’instance, y compris ses mondes solo et ses réglages locaux.** Une confirmation est demandée avant cette opération ; sauvegardez les fichiers que vous souhaitez garder.
 
-### Quick Build (Recommended)
+### Réglages Java : global ou par modpack
 
-The easiest way to build Amethyst is to use the pre-built JREs provided by our CI.
+Dans **Paramètres → Java**, l’allocation de mémoire et les arguments JVM sont les valeurs globales par défaut. Dans **Gestion du modpack → Réglages Java de ce modpack**, chaque option peut suivre la valeur globale ou utiliser une exception propre au pack ; la source active est affichée.
 
-1. Clone the repository: `git clone --recursive https://github.com/AngelAuraMC/Amethyst-Android.git`
-2. Build the launcher: `./gradlew :app_pojavlauncher:assembleDebug` (Use `gradlew.bat` on Windows)
+Les arguments propres à un modpack **remplacent** les arguments globaux. Une exception vide permet de ne fournir aucun argument personnalisé. La mémoire se règle avec son allocation, sans ajouter de `-Xmx` ou `-Xms`. Pour les profils Snake N3st, ces réglages sont modifiés depuis la gestion du modpack ; le champ JVM de l’éditeur Amethyst est en lecture seule.
 
-The built APK will be located in `app_pojavlauncher/build/outputs/apk/debug/`.
+Les anciens réglages sont conservés. Cochez **Utiliser l’allocation globale** ou **Utiliser les arguments JVM globaux** pour faire suivre les valeurs Amethyst à un pack déjà configuré.
 
-### Detailed Build
+### Jouer hors connexion
 
-If you need more control over the build process, follow these steps:
+Après une erreur de requête, choisissez **Passer hors connexion**. Cette action est également accessible depuis le panneau du compte.
 
-1. **Java Runtime Environment (JRE):** Download the `jre8-pojav` artifact from our [CI auto builds](https://github.com/AngelAuraMC/openjdk-build-multiarch/actions).  This package contains pre-built JREs for all supported architectures.  If you need to build the JRE yourself, follow the instructions in the [android-openjdk-build-multiarch](https://github.com/AngelAuraMC/openjdk-build-multiarch) repository.
+- Les modpacks entièrement installés peuvent être lancés sans synchronisation ni téléchargement.
+- La session sauvegardée est transmise au jeu comme d’habitude. Si sa clé a expiré et qu’un serveur la refuse, reconnectez-vous dans le launcher puis relancez le jeu.
+- Le déverrouillage Android reste nécessaire lorsque la protection est activée. Les avatars et les icônes déjà chargés restent disponibles après redémarrage.
+- Un pack installé mais absent du dernier catalogue reçu reste visible avec la mention **Retiré du site**. Il peut encore être lancé pour retrouver, par exemple, un monde solo ; sa réparation et ses téléchargements sont désactivés.
+- Une installation incomplète reste visible et doit être terminée en ligne avant de jouer. Les actualités, téléchargements et recherches de mises à jour nécessitent une connexion.
 
-2. **LWJGL:** The build instructions for the custom LWJGL are available over the [LWJGL repository](https://github.com/AngelAuraMC/lwjgl3).
+Pour reprendre la synchronisation, choisissez **Revenir en ligne**.
 
-3. **Language List:** Because languages are auto-added by Crowdin, you need to run the language list generator before building. In the project directory, run:
-   * Linux/macOS:
-     ```bash
-     chmod +x scripts/languagelist_updater.sh
-     bash scripts/languagelist_updater.sh
-     ```
-   * Windows:
-     ```batch
-     scripts\languagelist_updater.bat
-     ```
+### Protéger cet appareil
 
-4. **Build GLFW stub:** `./gradlew :jre_lwjgl3glfw:build`
+Depuis le panneau du profil, choisissez **Protéger avec Android**. Android 11 et les versions suivantes proposent une biométrie forte compatible (par exemple l’empreinte) ou le code, schéma ou mot de passe du téléphone. Android 8 à 10 utilisent le verrouillage du téléphone. Le dialogue Android s’ouvre automatiquement à l’arrivée sur une session verrouillée. En cas d’annulation, un bouton permet de réessayer. Le launcher ne reçoit jamais votre code ni votre empreinte.
 
-5. **Build the launcher:** `./gradlew :app_pojavlauncher:assembleDebug` (Replace `gradlew` with `gradlew.bat` on Windows).
+La session et les fichiers sensibles restent chiffrés. Si un ancien PIN du launcher est activé, déverrouillez-le puis choisissez **Remplacer l’ancien PIN** dans le profil : la même clé est conservée, sans réinitialiser vos données. La désactivation de la protection nécessite une nouvelle authentification Android. Configurez un verrouillage d’écran avant d’activer cette option.
 
-## Current Status
+### Java et compatibilité
 
-* [x] OpenJDK 8 Mobile port: ARM32, ARM64, x86, x86_64
-* [x] OpenJDK 17 Mobile port: ARM32, ARM64, x86, x86_64
-* [x] OpenJDK 21 Mobile port: ARM32, ARM64, x86, x86_64
-* [x] Headless mod installer
-* [x] Mod installer with GUI
-* [x] OpenGL in OpenJDK environment
-* [x] OpenAL (works on most devices)
-* [x] Support for Minecraft 1.12.2 and below
-* [x] Support for Minecraft 1.13 and above
-* [x] Support for Minecraft 1.17 (22w13a) and above
-* [x] Game surface zooming
-* [x] New input pipe rewritten to native code
-* [x] Rewritten entire controls system
-* [ ] More to come!
+L’APK **n’embarque aucun runtime Java**. Le launcher réutilise un runtime compatible déjà installé ou télécharge celui nécessaire au modpack lors de son installation. Les runtimes restent ensuite sur l’appareil et sont réutilisables hors connexion. Leur gestion manuelle reste accessible depuis les paramètres Amethyst.
 
-## Known Issues
+Les runtimes déjà installés sont conservés lors de la mise à jour. Ils occupent de la place dans les données de l’application, mais leur archive compressée n’est plus incluse dans l’APK.
 
-See our [issue tracker](https://github.com/AngelAuraMC/Amethyst-Android/issues) for a list of known issues and their current status.
+Vanilla, Fabric et Quilt sont intégrés ; Forge et NeoForge utilisent les installateurs Amethyst. Pour ces derniers, terminez l’installateur puis touchez **Jouer** à nouveau. La compatibilité d’un modpack dépend aussi de ses mods, du runtime choisi et du moteur de rendu Android.
 
-## FAQ
+## Compiler une version de développement
 
-See our [wiki](https://wiki.angelauramc.dev/) for more information.
+Prérequis : **JDK 21**, **SDK Android 37**, **NDK 27.3.13750724**, Git et les outils Bash usuels (`curl`, `tar`, `xz`, `sha256sum`). Configurez `JAVA_HOME` pour le JDK et `ANDROID_HOME` pour le SDK. Les licences SDK doivent être acceptées ; les sous-modules peuvent demander des composants NDK supplémentaires.
 
-## Contributing
+```bash
+git clone --recurse-submodules https://github.com/Snake-N3st/SnakeN3stLauncher-Android.git
+cd SnakeN3stLauncher-Android
 
-Contributions are welcome! We welcome any type of contribution, not only code. For example, you can help improve the [wiki](https://github.com/AngelAuraMC/angelauramc.github.io/), contribute to the [translations](https://crowdin.com/project/pojavlauncher), or submit bug reports and feature requests.
+export ANDROID_HOME="$HOME/Android/Sdk"
 
-Any code change should be submitted as a pull request. The description should explain what the code does and give steps to execute it.
+# Générer les ressources de langues.
+bash scripts/languagelist_updater.sh
 
-## Support
+# Remplacer la valeur par le client Azuriom prévu pour Android.
+./scripts/build-sn3.sh :app_pojavlauncher:assembleDebug \
+  -Psn3.clientId=VOTRE_CLIENT_ID
+```
 
-For support, please join our [Discord server](https://discord.gg/5ptqkyZxEy).
+APK généré : `app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk`.
 
-## License
+Le **client_id est fixé à la compilation**, pas dans l’application. Les builds distribués doivent également fournir les clés publiques racines du site pour vérifier les signatures des manifestes. Les propriétés disponibles et la configuration des versions signées sont détaillées dans le [guide de développement](docs/DEVELOPMENT.md).
 
-Amethyst is licensed under [GNU LGPLv3](https://github.com/AngelAuraMC/Amethyst-Android/blob/v3_openjdk/LICENSE).
+Utilisez toujours `scripts/build-sn3.sh` : il impose la priorité CPU minimale (`nice -n 19`), une priorité disque inactive si disponible, deux workers et un daemon Gradle non réutilisé.
 
-## Credits & Dependencies
+Pour exécuter uniquement les tests du cœur, sans SDK Android :
 
-* [Boardwalk](https://github.com/zhuowei/Boardwalk) (JVM Launcher): Unknown License/[Apache License 2.0](https://github.com/zhuowei/Boardwalk/blob/master/LICENSE) or GNU GPLv2.
-* [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher): [GLGPL](https://github.com/PojavLauncherTeam/PojavLauncher/blob/v3_openjdk/LICENSE)
-* Android Support Libraries: [Apache License 2.0](https://android.googlesource.com/platform/prebuilts/maven_repo/android/+/master/NOTICE.txt).
-* [GL4ES](https://github.com/AngelAuraMC/gl4es): [MIT License](https://github.com/ptitSeb/gl4es/blob/master/LICENSE).
-* [MobileGlues](https://github.com/MobileGL-Dev/MobileGlues): [LGPL-2.1 License](https://github.com/MobileGL-Dev/MobileGlues/blob/dev-es/LICENSE).
-* [Krypton Wrapper](https://github.com/BZLZHH/NG-GL4ES): [MIT License](https://github.com/BZLZHH/NG-GL4ES/blob/main/LICENSE)
-* [ANGLE](https://chromium.googlesource.com/angle/angle): [All Rights Reserved](app_pojavlauncher/src/main/assets/licenses/ANGLE_LICENSE).
-* [OpenJDK](https://github.com/AngelAuraMC/openjdk-multiarch-jdk8u): [GNU GPLv2 License](https://openjdk.java.net/legal/gplv2+ce.html).
-* [LWJGL3](https://github.com/AngelAuraMC/lwjgl3): [BSD-3 License](https://github.com/LWJGL/lwjgl3/blob/master/LICENSE.md).
-* [LWJGLX](https://github.com/AngelAuraMC/lwjglx) (LWJGL2 API compatibility layer for LWJGL3): unknown license.
-* [Mesa 3D Graphics Library](https://gitlab.freedesktop.org/mesa/mesa): [MIT License](https://docs.mesa3d.org/license.html).
-* [bhook](https://github.com/bytedance/bhook) (Used for exit code trapping): [MIT license](https://github.com/bytedance/bhook/blob/main/LICENSE).
-* [libepoxy](https://github.com/anholt/libepoxy): [MIT License](https://github.com/anholt/libepoxy/blob/master/COPYING).
-* [virglrenderer](https://github.com/AngelAuraMC/virglrenderer): [MIT License](https://gitlab.freedesktop.org/virgl/virglrenderer/-/blob/master/COPYING).
-* [OpenAL-Soft](https://github.com/kcat/openal-soft): [GNU GPLv2](app_pojavlauncher/src/main/assets/licenses/OPENAL-SOFT_GPL2)
-  * [oboe](https://github.com/google/oboe): [Apache License 2.0](app_pojavlauncher/src/main/assets/licenses/OBOE_APACHE2).
-  * [pfffft](https://bitbucket.org/jpommier/pffft/src/master/): [ARR](app_pojavlauncher/src/main/assets/licenses/PFFFT_LICENSE)
-* [SDL3](https://github.com/libsdl-org/SDL): [zlib License](https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt)
-* [sdl2-compat](https://github.com/libsdl-org/sdl2-compat): [zlib License](https://github.com/libsdl-org/sdl2-compat/blob/main/LICENSE.txt)
-* Thanks to [MCHeads](https://mc-heads.net) for providing Minecraft avatars.
+```bash
+./scripts/build-sn3.sh -p sn3-core test
+```
 
-## Roadmap
+### Téléchargements simultanés
 
-We are currently focusing on:
+Dans **Paramètres → Divers**, le réglage **Téléchargements simultanés du jeu** permet de choisir entre 2 et 16 transferts Minecraft, avec **8 par défaut**. Les bibliothèques, ressources, fichiers du jeu et le runtime nécessaire peuvent être téléchargés en parallèle une fois leurs métadonnées connues. Les fichiers identiques sont dédupliqués ; les téléchargements des modpacks conservent leur protocole par lots.
 
-* Exploring new rendering technologies.
+## Organisation du projet
 
-Future plans include:
+- [`sn3-core/`](sn3-core/) : authentification, catalogues, synchronisation, signatures et gestion des fichiers, indépendants d’Android.
+- [`app_pojavlauncher/`](app_pojavlauncher/) : application Amethyst et intégration Android Snake N3st dans le package `snaken3st`.
+- [`scripts/`](scripts/) : compilation et outils de publication.
+- [Guide de développement](docs/DEVELOPMENT.md) : configuration, sécurité, publication et vérifications sur appareil.
+- [Notes de portage](docs/PORTAGE.md) : correspondance avec le launcher PC et points de validation.
+- [README Amethyst d’origine](README.amethyst.md) : documentation conservée du projet amont.
 
-* Improving stability and performance.
-* Enhancing the mod installation experience.
+## Aide et contributions
 
-We welcome community feedback and suggestions for our roadmap.  Please feel free to open a feature request in our [issue tracker](https://github.com/AngelAuraMC/Amethyst-Android/issues).
+Pour une question ou un problème en jeu, rejoignez le [Discord Snake N3st](https://discord.gg/wCJZpreVDj). L’application propose aussi **Signaler un bug** depuis le panneau du compte.
+
+Pour contribuer, ouvrez une issue ou une pull request en précisant le modèle de l’appareil, la version d’Android, le modpack et les étapes de reproduction. Ne publiez jamais votre code de verrouillage, une clé de session ou un journal contenant un jeton d’authentification.
+
+## Crédits et licences
+
+Merci aux équipes d’[Amethyst](https://github.com/AngelAuraMC/Amethyst-Android) et de [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher), dont ce fork reprend le moteur Android et les contrôles.
+
+Les sources amont conservent leurs licences et leurs en-têtes. Le cœur et l’intégration Snake N3st sont sous **GPL-3.0** ; le binaire combiné est distribué sous GPL-3.0. Voir [LICENSE](LICENSE), [sn3-core/LICENSE](sn3-core/LICENSE) et [THIRD-PARTY-SNAKE-N3ST.md](THIRD-PARTY-SNAKE-N3ST.md).

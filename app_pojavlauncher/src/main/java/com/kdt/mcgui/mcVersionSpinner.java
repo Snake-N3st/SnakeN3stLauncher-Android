@@ -1,7 +1,7 @@
 package com.kdt.mcgui;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
-import static net.kdt.pojavlaunch.fragments.ProfileEditorFragment.DELETED_PROFILE;
+import static mc.snakenest.launcher.android.fragments.ProfileEditorFragment.DELETED_PROFILE;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -21,15 +21,15 @@ import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.FragmentActivity;
 
-import net.kdt.pojavlaunch.R;
-import net.kdt.pojavlaunch.Tools;
-import net.kdt.pojavlaunch.extra.ExtraConstants;
-import net.kdt.pojavlaunch.extra.ExtraCore;
-import net.kdt.pojavlaunch.fragments.ProfileEditorFragment;
-import net.kdt.pojavlaunch.fragments.ProfileTypeSelectFragment;
-import net.kdt.pojavlaunch.prefs.LauncherPreferences;
-import net.kdt.pojavlaunch.profiles.ProfileAdapter;
-import net.kdt.pojavlaunch.profiles.ProfileAdapterExtra;
+import mc.snakenest.launcher.android.R;
+import mc.snakenest.launcher.android.Tools;
+import mc.snakenest.launcher.android.extra.ExtraConstants;
+import mc.snakenest.launcher.android.extra.ExtraCore;
+import mc.snakenest.launcher.android.fragments.ProfileEditorFragment;
+import mc.snakenest.launcher.android.fragments.ProfileTypeSelectFragment;
+import mc.snakenest.launcher.android.prefs.LauncherPreferences;
+import mc.snakenest.launcher.android.profiles.ProfileAdapter;
+import mc.snakenest.launcher.android.profiles.ProfileAdapterExtra;
 
 import fr.spse.extended_view.ExtendedTextView;
 

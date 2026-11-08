@@ -1,8 +1,8 @@
 package org.lwjgl.glfw;
 
-import net.kdt.pojavlaunch.*;
-import net.kdt.pojavlaunch.customcontrols.gamepad.direct.DirectGamepadEnableHandler;
-import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import mc.snakenest.launcher.android.*;
+import mc.snakenest.launcher.android.customcontrols.gamepad.direct.DirectGamepadEnableHandler;
+import mc.snakenest.launcher.android.prefs.LauncherPreferences;
 
 import android.content.*;
 import android.util.DisplayMetrics;
@@ -107,7 +107,7 @@ public class CallbackBridge {
     public static void sendChar(char keychar, int modifiers){
         // Only an EditText goes through here, that means emojis are allowed, so no isISOControl
         // cause we might break emoji mods then.
-        // See net/kdt/pojavlaunch/customcontrols/keyboard/TouchCharInput.java#L147 (onTextChanged)
+        // See mc/snakenest/launcher/android/customcontrols/keyboard/TouchCharInput.java#L147 (onTextChanged)
         nativeSendCharMods(keychar,modifiers);
         nativeSendChar(keychar);
         if (!MinecraftGLSurface.sdlEnabled) return;

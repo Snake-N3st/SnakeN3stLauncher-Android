@@ -94,7 +94,7 @@
 
 
 
-    <com.kdt.mcgui.mcVersionSpinner
+    <com.kdt.mcgui.mcModpackSpinner
         android:id="@+id/mc_version_spinner"
         android:layout_width="0dp"
         android:layout_height="@dimen/_32sdp"

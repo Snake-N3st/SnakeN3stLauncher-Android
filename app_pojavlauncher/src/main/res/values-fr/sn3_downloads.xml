@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sn3_download_threads_title">Téléchargements simultanés du jeu</string>
+    <string name="sn3_download_threads_summary">Nombre maximal de transferts Minecraft : 8 par défaut. Les lots des modpacks sont gérés séparément.</string>
+</resources>

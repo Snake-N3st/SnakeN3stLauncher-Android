@@ -2,7 +2,7 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app2="http://schemas.android.com/apk/res-auto">
 
-    <net.kdt.pojavlaunch.prefs.BackButtonPreference/>
+    <mc.snakenest.launcher.android.prefs.BackButtonPreference/>
 
     <PreferenceCategory android:title="@string/preference_category_miscellaneous">
         <SwitchPreference
@@ -24,6 +24,13 @@
             android:title="@string/preference_download_source_title"
             android:summary="@string/preference_download_source_description"
             app2:useSimpleSummaryProvider="true"/>
+        <androidx.preference.ListPreference
+            android:key="sn3.downloadThreads"
+            android:defaultValue="8"
+            android:entries="@array/sn3_download_thread_labels"
+            android:entryValues="@array/sn3_download_thread_values"
+            android:title="@string/sn3_download_threads_title"
+            android:summary="@string/sn3_download_threads_summary" />
         <SwitchPreference
             android:defaultValue="true"
             android:key="verifyManifest"

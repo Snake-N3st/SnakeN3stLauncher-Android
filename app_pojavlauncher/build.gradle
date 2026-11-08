@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 plugins {
     id 'com.android.application' version '9.3.1'
 }
@@ -65,6 +67,30 @@ def getCFApiKey = {
     return "DUMMY";
 }
 
+def sn3Origin = new URI(providers.gradleProperty('sn3.baseUrl').getOrElse('https://snake-n3st.fr'))
+if (sn3Origin.scheme != 'https' || !sn3Origin.host || sn3Origin.rawQuery || sn3Origin.rawFragment || sn3Origin.rawUserInfo || !(sn3Origin.path in ['', '/'])) {
+    throw new GradleException('sn3.baseUrl must be an HTTPS origin, without credentials, query or path')
+}
+
+// Android uses versionCode, never a version-name comparison, to decide whether an APK is newer.
+def sn3VersionCodeText = providers.gradleProperty('sn3.versionCode').getOrElse('10000001')
+if (!(sn3VersionCodeText ==~ /[1-9][0-9]{0,9}/) || sn3VersionCodeText.toBigInteger() > 2100000000G) {
+    throw new GradleException('sn3.versionCode must be an integer between 1 and 2100000000, without signs or spaces')
+}
+def sn3VersionCode = sn3VersionCodeText.toInteger()
+def sn3VersionName = providers.gradleProperty('sn3.versionName').getOrElse('0.2.0')
+if (!(sn3VersionName ==~ /[0-9A-Za-z][0-9A-Za-z.+_-]{0,79}/)) {
+    throw new GradleException('sn3.versionName must contain 1 to 80 ASCII letters, digits, dots, plus, underscores or hyphens')
+}
+def sn3ReleasePath = System.getenv('SN3_RELEASE_KEYSTORE_PATH')
+def sn3ReleasePassword = System.getenv('SN3_RELEASE_KEYSTORE_PASSWORD')
+def sn3ReleaseAlias = System.getenv('SN3_RELEASE_KEY_ALIAS')
+def sn3ReleaseSigningConfigured = [sn3ReleasePath, sn3ReleasePassword, sn3ReleaseAlias].every { it != null && !it.isEmpty() }
+def sn3ReleaseRequested = gradle.startParameter.taskNames.any { it.tokenize(':').last().toLowerCase().contains('release') }
+if (sn3ReleaseRequested && !sn3ReleaseSigningConfigured) {
+    throw new GradleException('Release signing requires SN3_RELEASE_KEYSTORE_PATH, SN3_RELEASE_KEYSTORE_PASSWORD and SN3_RELEASE_KEY_ALIAS; an unsigned production APK will not be built')
+}
+
 configurations {
     instrumentedClasspath {
         canBeConsumed = false
@@ -73,7 +99,7 @@ configurations {
 }
 
 android {
-    namespace 'net.kdt.pojavlaunch'
+    namespace 'mc.snakenest.launcher.android'
 
     compileSdk = 37
 
@@ -91,6 +117,14 @@ android {
             keyAlias "android_github_release"
             keyPassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
         }
+        if (sn3ReleaseSigningConfigured) {
+            sn3Release {
+                storeFile file(sn3ReleasePath)
+                storePassword sn3ReleasePassword
+                keyAlias sn3ReleaseAlias
+                keyPassword sn3ReleasePassword
+            }
+        }
         googlePlayBuild {
             storeFile file("upload.jks")
             storePassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
@@ -100,11 +134,15 @@ android {
     }
 
     defaultConfig {
-        applicationId "org.angelauramc.amethyst"
-        minSdkVersion 21
+        applicationId "mc.snakenest.launcher.android"
+        minSdkVersion 26
         targetSdkVersion 34
-        versionCode 10000000
-        versionName getVersionName()
+        versionCode sn3VersionCode
+        versionName sn3VersionName
+        buildConfigField 'String', 'SN3_BASE_URL', JsonOutput.toJson(providers.gradleProperty('sn3.baseUrl').getOrElse('https://snake-n3st.fr'))
+        buildConfigField 'String', 'SN3_CLIENT_ID', JsonOutput.toJson(providers.gradleProperty('sn3.clientId').getOrElse(''))
+        buildConfigField 'String', 'SN3_ROOT_KEYS', JsonOutput.toJson(providers.gradleProperty('sn3.modpackRootKeys').getOrElse(''))
+        testInstrumentationRunner "mc.snakenest.launcher.android.snaken3st.UpdateVerifierInstrumentation"
         multiDexEnabled true //important
         resValue 'string', 'curseforge_api_key', getCFApiKey()
         externalNativeBuild {
@@ -122,11 +160,11 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.customDebug
-            resValue "string", "app_name", "Amethyst (Debug)"
-            resValue "string", "app_short_name", "Amethyst (Debug)"
-            resValue 'string', 'application_package', 'org.angelauramc.amethyst.debug'
-            resValue 'string', 'storageProviderAuthorities', 'org.angelauramc.amethyst.scoped.gamefolder.debug'
-            resValue 'string', 'shareProviderAuthority', 'org.angelauramc.amethyst.scoped.controlfolder.debug'
+            resValue "string", "app_name", "Snake N3st Launcher (Test)"
+            resValue "string", "app_short_name", "Snake N3st Launcher (Test)"
+            resValue 'string', 'application_package', 'mc.snakenest.launcher.android.debug'
+            resValue 'string', 'storageProviderAuthorities', 'mc.snakenest.launcher.android.scoped.gamefolder.debug'
+            resValue 'string', 'shareProviderAuthority', 'mc.snakenest.launcher.android.scoped.controlfolder.debug'
         }
         proguard {
             initWith debug
@@ -142,14 +180,14 @@ android {
             // Don't set to true or java.awt will be a.a or something similar.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.customRelease
+            if (sn3ReleaseSigningConfigured) signingConfig signingConfigs.sn3Release
             // defaultConfig already set
             // multiDexEnabled = true
             // debuggable = true
-            resValue "string", "app_name", "Amethyst"
-            resValue "string", "app_short_name", "Amethyst"
-            resValue 'string', 'storageProviderAuthorities', 'org.angelauramc.amethyst.scoped.gamefolder'
-            resValue 'string', 'application_package', 'org.angelauramc.amethyst'
+            resValue "string", "app_name", "Snake N3st Launcher"
+            resValue "string", "app_short_name", "Snake N3st Launcher"
+            resValue 'string', 'storageProviderAuthorities', 'mc.snakenest.launcher.android.scoped.gamefolder'
+            resValue 'string', 'application_package', 'mc.snakenest.launcher.android'
         }
         gplay {
             initWith release
@@ -167,14 +205,21 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
     }
 
     bundle {
         language {
             enableSplit = false
         }
+    }
+
+    // Never package a Java runtime, even if assets from an older local build remain present.
+    // Java is installed on demand by NewJREUtil and reused from the app's runtime directory.
+    sourceSets {
+        main.assets.setSrcDirs([layout.buildDirectory.dir('generated/sn3-assets')])
     }
 
     packagingOptions {
@@ -205,8 +250,17 @@ afterEvaluate {
             ":jre_lwjgl3glfw:jar"
     ]
 
+    // AGP asset merging does not honor AndroidSourceDirectorySet.exclude consistently.
+    // Feed it a filtered generated directory, after all native component JARs are ready.
+    def sn3Assets = tasks.register("prepareSn3Assets", Sync) {
+        dependsOn(componentJars)
+        from("src/main/assets") {
+            exclude 'components/jre/**', 'components/jre-new/**', 'components/jre-*/**'
+        }
+        into(layout.buildDirectory.dir('generated/sn3-assets'))
+    }
     tasks.withType(com.android.build.gradle.tasks.MergeSourceSetFolders).configureEach { t ->
-        t.dependsOn(componentJars)
+        t.dependsOn(sn3Assets)
     }
 
     // Needed or else the release builds complain about undeclared dependencies
@@ -216,6 +270,8 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation project(':sn3-core')
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
     implementation 'commons-codec:commons-codec:1.15'
     // implementation 'com.wu-man:android-bsf-api:3.1.3'
@@ -242,12 +298,13 @@ dependencies {
     // https://github.com/PojavLauncherTeam/exp4j
     implementation 'net.sourceforge.htmlcleaner:htmlcleaner:2.6.1'
     implementation 'com.bytedance:bytehook:1.0.10'
+    implementation 'androidx.biometric:biometric:1.1.0'
 
     // implementation 'net.sourceforge.streamsupport:streamsupport-cfuture:1.7.0'
 
     implementation 'top.fifthlight.touchcontroller:proxy-client-android:0.0.4'
 
-    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'], exclude: ['gson-*.jar'])
 
     implementation "net.java.dev.jna:jna:5.14.0@aar"
 
@@ -255,3 +312,12 @@ dependencies {
 
 }
 apply from: rootProject.file('gradle/prefab_bypass.gradle')
+
+// Aggregate tasks can select release without mentioning it on the command line.
+tasks.configureEach { task ->
+    if (task.name in ['assembleRelease', 'bundleRelease', 'packageRelease', 'validateSigningRelease']) {
+        task.doFirst {
+            if (!sn3ReleaseSigningConfigured) throw new GradleException('Production APK signing is not configured; refusing unsigned release packaging')
+        }
+    }
+}

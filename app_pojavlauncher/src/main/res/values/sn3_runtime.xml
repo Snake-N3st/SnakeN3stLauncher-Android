@@ -1,0 +1,4 @@
+<resources>
+    <string name="sn3_legacy_runtime">Ancien runtime intégré (conservé)</string>
+    <string name="sn3_bundled_runtime">Java 21 (ancienne installation intégrée)</string>
+</resources>
