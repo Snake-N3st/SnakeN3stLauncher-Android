@@ -28,7 +28,7 @@ public final class Sn3LoginFragment extends Fragment {
     private ProgressBar progress;
     private String openedChallenge;
     private String browserError;
-    private boolean leaving;
+    private boolean leaving,autoUnlockAttempted;
     private final int[] toolbarIds={R.id.account_spinner,R.id.sn3_account_button,R.id.setting_button};
     private final int[] toolbarVisibility=new int[3];
     private final Runnable observer=()->{if(isAdded()&&getView()!=null)render();};
@@ -40,10 +40,10 @@ public final class Sn3LoginFragment extends Fragment {
     }
     @Override public void onCreate(@Nullable Bundle saved) {
         super.onCreate(saved);repo=SnakeRepository.get(requireContext());
-        if(saved!=null)openedChallenge=saved.getString("openedChallenge");
+        if(saved!=null){openedChallenge=saved.getString("openedChallenge");autoUnlockAttempted=saved.getBoolean("autoUnlockAttempted");}
     }
     @Override public void onSaveInstanceState(@NonNull Bundle out) {
-        super.onSaveInstanceState(out);out.putString("openedChallenge",openedChallenge);
+        super.onSaveInstanceState(out);out.putString("openedChallenge",openedChallenge);out.putBoolean("autoUnlockAttempted",autoUnlockAttempted);
     }
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,@Nullable ViewGroup container,@Nullable Bundle saved) {
         ScrollView scroll=new ScrollView(requireContext());scroll.setFillViewport(true);scroll.setBackgroundColor(color(R.color.background_app));
@@ -117,6 +117,12 @@ public final class Sn3LoginFragment extends Fragment {
         secondary.setText(waiting?"Ouvrir le navigateur":"Se connecter à un autre compte");
         secondary.setVisibility(waiting || !repo.busy&&saved&&!locked ? View.VISIBLE:View.GONE);secondary.setEnabled(!repo.busy || !repo.cancellationRequested);
         cancel.setVisibility(repo.busy?View.VISIBLE:View.GONE);cancel.setEnabled(!repo.cancellationRequested);
+        if(locked&&androidProtection&&!repo.busy&&isResumed()&&!autoUnlockAttempted){
+            autoUnlockAttempted=true;
+            // Post outside fragment lifecycle/transaction dispatch. An error or cancellation
+            // leaves a manual retry button instead of repeatedly opening the system prompt.
+            connect.post(()->{if(isAdded()&&isResumed()&&connect!=null&&repo.session==null&&repo.pinKey==null&&!repo.busy)connect();});
+        }
         if(waiting&&!repo.cancellationRequested&&!repo.loginUrl.equals(openedChallenge)) {
             openedChallenge=repo.loginUrl;open(openedChallenge);
         }
@@ -125,6 +131,7 @@ public final class Sn3LoginFragment extends Fragment {
         if(repo.busy||Sn3GameBridge.isRunning(requireContext()))return;
         browserError=null;
         if(repo.deviceProtection.enabled()&&repo.pinKey==null) {
+            autoUnlockAttempted=true;
             DeviceAuthFragment.authenticate(requireActivity(),repo::unlockDevice,message->{if(isAdded()){browserError=message;render();}});
         } else if(repo.pin.isEnabled()&&repo.pinKey==null) {
             char[] code=new char[pin.length()];pin.getText().getChars(0,pin.length(),code,0);pin.setText("");

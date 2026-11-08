@@ -189,4 +189,4 @@ adb shell am instrument -w -e deviceProtection true \
 
 Les 14 contrôles utilisent un alias Keystore temporaire et des fichiers isolés : clé non exportable, authentification requise, types et durée autorisés, corruption, perte de clé, nettoyage et reprise de session. Ils ne demandent aucune authentification personnelle et ne modifient ni le verrouillage du téléphone ni la protection du compte réel.
 
-Le runner `-e deviceAuthUi true` vérifie l’écran protégé sans champ PIN et l’annulation du dialogue système avec une opération factice ; `systemPromptShown=true` confirme le rendu natif. Le succès ne déclenche aucun déverrouillage réel ni activation. Dix contrôles attendus, zéro requête réseau ; capture `cache/sn3-device-auth-ui-check.png`.
+Le runner `-e deviceAuthUi true` vérifie l’écran protégé sans champ PIN et l’ouverture automatique et l’annulation du dialogue système avec une session factice ; `systemPromptShown=true` confirme le rendu natif. Le dialogue est annulé sans authentification et aucune activation réelle n’est effectuée. Onze contrôles attendus, zéro requête réseau ; capture `cache/sn3-device-auth-ui-check.png`.

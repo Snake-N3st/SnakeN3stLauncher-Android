@@ -26,10 +26,10 @@ final class DeviceAuthUiChecks {
     static void run(Instrumentation test) {
         Bundle result=new Bundle();int passed=0;Path root=null;Field repositoryInstance=null,updaterInstance=null;
         SnakeRepository original=null,fixture=null;Object previousUpdater=null;SnakeUpdater fixtureUpdater=null;LauncherActivity activity=null;
-        ProxySelector previousProxy=ProxySelector.getDefault();AtomicInteger requests=new AtomicInteger(),successes=new AtomicInteger(),errors=new AtomicInteger();Set<String> preferences=new HashSet<>();
+        ProxySelector previousProxy=ProxySelector.getDefault();AtomicInteger requests=new AtomicInteger();Set<String> preferences=new HashSet<>();
         Context target=test.getTargetContext();
         try {
-            Tools.initStorageConstants(target);LauncherPreferences.loadPreferences(target);
+            test.runOnMainSync(()->{Tools.initStorageConstants(target);LauncherPreferences.loadPreferences(target);});
             KeyStore keyStore=KeyStore.getInstance("AndroidKeyStore");keyStore.load(null);boolean hadAlias=keyStore.containsAlias(AndroidDeviceProtection.ALIAS);
             root=Files.createTempDirectory(target.getCacheDir().toPath(),"sn3-device-ui-fixture-");Path fixtureRoot=root;String prefix=root.getFileName().toString();
             Context context=new ContextWrapper(target) {
@@ -63,9 +63,7 @@ final class DeviceAuthUiChecks {
                 View view=host.getWindow().getDecorView();Bitmap image=Bitmap.createBitmap(view.getWidth(),view.getHeight(),Bitmap.Config.ARGB_8888);view.draw(new Canvas(image));
                 try(OutputStream output=new FileOutputStream(new File(target.getCacheDir(),"sn3-device-auth-ui-check.png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}catch(IOException failure){throw new RuntimeException(failure);}finally{image.recycle();}
             });passed++;
-            // No protected operation is attached: success only increments a fixture counter.
-            // The existing user's key alias is never prepared or read by this test.
-            test.runOnMainSync(()->DeviceAuthFragment.authenticate(host,successes::incrementAndGet,message->errors.incrementAndGet()));
+            // The locked screen must launch this prompt itself, without pressing its button.
             boolean systemPrompt=false;
             for(int i=0;i<30&&!systemPrompt;i++) {
                 AccessibilityNodeInfo node=test.getUiAutomation().getRootInActiveWindow();
@@ -73,11 +71,15 @@ final class DeviceAuthUiChecks {
                 if(!systemPrompt){test.waitForIdleSync();Thread.sleep(50);}
             }
             result.putBoolean("systemPromptShown",systemPrompt);
+            check(systemPrompt);
+            if(systemPrompt)Thread.sleep(400);
             if(systemPrompt)try(ParcelFileDescriptor fd=test.getUiAutomation().executeShellCommand("input keyevent KEYCODE_BACK");InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(fd)){while(input.read()!=-1){}}
             boolean[] removed={false};
             for(int i=0;i<40&&!removed[0];i++){test.waitForIdleSync();test.runOnMainSync(()->removed[0]=host.getSupportFragmentManager().findFragmentByTag("Sn3DeviceAuthentication")==null);if(!removed[0])Thread.sleep(50);}
-            check(removed[0]&&errors.get()==1);passed++;
-            check(successes.get()==0&&fixture.session==null&&fixture.pinKey==null);passed++;
+            test.runOnMainSync(()->check(removed[0]&&findText(host.getWindow().getDecorView(),"Authentification annulée.")!=null));passed++;
+            SnakeRepository lockedRepo=fixture;test.runOnMainSync(lockedRepo::changed);test.waitForIdleSync();Thread.sleep(250);test.waitForIdleSync();
+            test.runOnMainSync(()->check(host.getSupportFragmentManager().findFragmentByTag("Sn3DeviceAuthentication")==null));passed++;
+            check(fixture.session==null&&fixture.pinKey==null);passed++;
             check(Arrays.equals(protectionBytes,Files.readAllBytes(protection))&&Arrays.equals(sessionBytes,Files.readAllBytes(session)));passed++;
             keyStore.load(null);check(keyStore.containsAlias(AndroidDeviceProtection.ALIAS)==hadAlias);passed++;
             check(requests.get()==0);passed++;result.putBoolean("success",true);

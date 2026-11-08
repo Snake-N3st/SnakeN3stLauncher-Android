@@ -71,7 +71,7 @@ Pour reprendre la synchronisation, choisissez **Revenir en ligne**.
 
 ### Protéger cet appareil
 
-Depuis le panneau du profil, choisissez **Protéger avec Android**. Android 11 et les versions suivantes proposent une biométrie forte compatible (par exemple l’empreinte) ou le code, schéma ou mot de passe du téléphone. Android 8 à 10 utilisent le verrouillage du téléphone. Le launcher ne reçoit jamais votre code ni votre empreinte.
+Depuis le panneau du profil, choisissez **Protéger avec Android**. Android 11 et les versions suivantes proposent une biométrie forte compatible (par exemple l’empreinte) ou le code, schéma ou mot de passe du téléphone. Android 8 à 10 utilisent le verrouillage du téléphone. Le dialogue Android s’ouvre automatiquement à l’arrivée sur une session verrouillée. En cas d’annulation, un bouton permet de réessayer. Le launcher ne reçoit jamais votre code ni votre empreinte.
 
 La session et les fichiers sensibles restent chiffrés. Si un ancien PIN du launcher est activé, déverrouillez-le puis choisissez **Remplacer l’ancien PIN** dans le profil : la même clé est conservée, sans réinitialiser vos données. La désactivation de la protection nécessite une nouvelle authentification Android. Configurez un verrouillage d’écran avant d’activer cette option.
 
