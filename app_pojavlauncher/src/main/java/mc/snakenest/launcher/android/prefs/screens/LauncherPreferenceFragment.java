@@ -31,6 +31,10 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
     public void onCreatePreferences(Bundle b, String str) {
         addPreferencesFromResource(R.xml.pref_main);
         setupNotificationRequestPreference();
+        requirePreference("sn3_benchmark").setOnPreferenceClickListener(preference -> {
+            startActivity(new android.content.Intent(requireContext(), mc.snakenest.launcher.android.snaken3st.BenchmarkActivity.class));
+            return true;
+        });
     }
 
     private void setupNotificationRequestPreference() {

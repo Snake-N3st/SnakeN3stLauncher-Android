@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sn3_benchmark_title">Benchmark CPU + GPU</string>
+    <string name="sn3_benchmark_summary">Mesure courte des performances et usages conseillés</string>
+</resources>

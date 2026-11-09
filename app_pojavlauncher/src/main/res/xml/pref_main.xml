@@ -55,6 +55,8 @@
             />
     </PreferenceCategory>
 
+    <Preference android:key="sn3_benchmark" android:title="@string/sn3_benchmark_title" android:summary="@string/sn3_benchmark_summary" />
+
     <SwitchPreference
         android:title="@string/preference_force_english_title"
         android:key="force_english"
