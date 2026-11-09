@@ -1,0 +1,5 @@
+plugins { id 'java-library' }
+java { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
+tasks.withType(JavaCompile).configureEach { options.release = 8 }
+dependencies { compileOnly fileTree(dir: '../jre_lwjgl3glfw/lwjgl-3.3.3/libs/lwjgl-3.3.3', include: ['*.jar']) }
+jar { archiveFileName = 'sn3-benchmark.jar'; preserveFileTimestamps = false; reproducibleFileOrder = true }

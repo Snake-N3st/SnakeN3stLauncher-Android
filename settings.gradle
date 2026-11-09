@@ -26,3 +26,5 @@ include ':forge_installer'
 include ':androidnsbypass'
 
 include ':sn3-core'
+
+include ':benchmark-runtime'

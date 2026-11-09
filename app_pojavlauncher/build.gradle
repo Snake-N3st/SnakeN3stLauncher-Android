@@ -253,7 +253,8 @@ afterEvaluate {
     // AGP asset merging does not honor AndroidSourceDirectorySet.exclude consistently.
     // Feed it a filtered generated directory, after all native component JARs are ready.
     def sn3Assets = tasks.register("prepareSn3Assets", Sync) {
-        dependsOn(componentJars)
+        dependsOn(componentJars, ":benchmark-runtime:jar")
+        from(project(":benchmark-runtime").layout.buildDirectory.file("libs/sn3-benchmark.jar")) { into "sn3-benchmark" }
         from("src/main/assets") {
             exclude 'components/jre/**', 'components/jre-new/**', 'components/jre-*/**'
         }

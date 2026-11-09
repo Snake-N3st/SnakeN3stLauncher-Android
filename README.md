@@ -30,7 +30,7 @@ Connectez votre compte Snake N3st, choisissez un modpack et retrouvez ses mods, 
 | **Hors connexion** | Lancement des packs déjà installés avec la session sauvegardée ; avatars et icônes restent disponibles depuis leur cache sur disque. |
 | **Actualités** | Articles illustrés, date et auteur, avec ouverture dans le navigateur. |
 | **Mises à jour** | Recherche automatique ou manuelle des versions publiées ; vérification de l’APK avant confirmation de l’installation par Android. |
-| **Benchmark** | Test CPU sur un cœur et rendu GPU GLES natif, environ 10 secondes, accessible dans les paramètres. Mesures brutes et conseils d’usage indicatifs ; aucune prédiction des FPS Minecraft. |
+| **Benchmark** | JAR exécuté dans la JVM et les couches graphiques Amethyst sélectionnées, environ 10 secondes. Cartes de mesures, courbes CPU/GPU réelles et détails repliables ; aucune prédiction des FPS Minecraft ni validation automatique des shaders. |
 | **Rapports de plantage** | Contexte du lancement et journaux consultables, copie, export, partage et envoi volontaire à l’équipe. Le dernier rapport reste accessible dans les paramètres. |
 | **Jeu** | Réglages par modpack, mémoire et arguments JVM, contrôles tactiles et paramètres Amethyst. |
 
@@ -138,3 +138,11 @@ Pour contribuer, ouvrez une issue ou une pull request en précisant le modèle d
 Merci aux équipes d’[Amethyst](https://github.com/AngelAuraMC/Amethyst-Android) et de [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher), dont ce fork reprend le moteur Android et les contrôles.
 
 Les sources amont conservent leurs licences et leurs en-têtes. Le cœur et l’intégration Snake N3st sont sous **GPL-3.0** ; le binaire combiné est distribué sous GPL-3.0. Voir [LICENSE](LICENSE), [sn3-core/LICENSE](sn3-core/LICENSE) et [THIRD-PARTY-SNAKE-N3ST.md](THIRD-PARTY-SNAKE-N3ST.md).
+
+### Diagnostic CPU / GPU
+
+Dans **Paramètres → Benchmark CPU + GPU**, le test exécute un JAR dans un processus isolé, avec le runtime du profil et le moteur de rendu sélectionnés. Un runtime Java compatible doit déjà être installé. Le test utilise le chemin LWJGL/JNI et les traductions graphiques d’Amethyst, avec un tas de 64 à 256 Mio ; il ne lance aucun modpack et ne lui transmet aucune session de compte.
+
+Les deux courbes ont leurs propres unités : débit CPU en millions d’itérations/s (intervalles d’environ 250 ms) et temps moyen d’une image de test GPU en ms (intervalles d’environ 100 ms). Elles représentent les relevés mesurés pendant les phases de 3 et 4 secondes, après chauffe. Les détails indiquent le runtime, la VM, le GPU, la traduction effective et les conditions du téléphone.
+
+Ce diagnostic ne charge ni monde, ni mods, ni shaderpack : il ne valide donc pas 60/120 FPS ni l’aptitude à un gros modpack. Ces objectifs nécessitent une mesure dans le jeu concerné.

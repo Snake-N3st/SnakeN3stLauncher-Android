@@ -332,6 +332,15 @@ public class JREUtils {
         }
     }
     public static void launchJavaVM(final AppCompatActivity activity, final Runtime runtime, File gameDirectory, final List<String> JVMArgs, final String userArgsString) throws Throwable {
+        launchJavaVMInternal(activity, runtime, gameDirectory, JVMArgs, userArgsString, false);
+    }
+
+    /** Isolated benchmark process: same JVM/rendering setup, no game session or crash bookkeeping. */
+    public static int launchBenchmarkVM(final AppCompatActivity activity, final Runtime runtime, File directory, final List<String> args) throws Throwable {
+        return launchJavaVMInternal(activity, runtime, directory, args, "", true);
+    }
+
+    private static int launchJavaVMInternal(final AppCompatActivity activity, final Runtime runtime, File gameDirectory, final List<String> JVMArgs, final String userArgsString, final boolean benchmark) throws Throwable {
         String runtimeHome = MultiRTUtils.getRuntimeHome(runtime.name).getAbsolutePath();
 
         JREUtils.relocateLibPath(runtime, runtimeHome);
@@ -353,6 +362,7 @@ public class JREUtils {
         }
 
         List<String> userArgs = getJavaArgs(activity, runtimeHome, userArgsString);
+        if (benchmark) userArgs.add("-Dsn3.benchmark.renderer=" + LOCAL_RENDERER);
 
         //Remove arguments that can interfere with the good working of the launcher
         purgeArg(userArgs,"-Xms");
@@ -370,8 +380,8 @@ public class JREUtils {
         purgeArg(userArgs, "-XX:ActiveProcessorCount");
 
         //Add automatically generated args
-        userArgs.add("-Xms" + LauncherPreferences.PREF_RAM_ALLOCATION + "M");
-        userArgs.add("-Xmx" + LauncherPreferences.PREF_RAM_ALLOCATION + "M");
+        userArgs.add("-Xms" + (benchmark ? 64 : LauncherPreferences.PREF_RAM_ALLOCATION) + "M");
+        userArgs.add("-Xmx" + (benchmark ? 256 : LauncherPreferences.PREF_RAM_ALLOCATION) + "M");
         if(LOCAL_RENDERER != null) userArgs.add("-Dorg.lwjgl.opengl.libname=" + graphicsLib);
 
         // Force LWJGL to use the Freetype library intended for it, instead of using the one
@@ -401,12 +411,12 @@ public class JREUtils {
             }
         }
 
-        if(LauncherPreferences.PREF_ARC_CAPES) {
+        if(!benchmark && LauncherPreferences.PREF_ARC_CAPES) {
             userArgs.add("-javaagent:"+new File(Tools.DIR_DATA,"arc_dns_injector/arc_dns_injector.jar").getAbsolutePath()+"=23.95.137.176");
         }
 
         userArgs.addAll(JVMArgs);
-        activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.autoram_info_msg,LauncherPreferences.PREF_RAM_ALLOCATION), Toast.LENGTH_SHORT).show());
+        if (!benchmark) activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.autoram_info_msg,LauncherPreferences.PREF_RAM_ALLOCATION), Toast.LENGTH_SHORT).show());
         System.out.println(JVMArgs);
 
         initJavaRuntime(runtimeHome);
@@ -415,15 +425,17 @@ public class JREUtils {
         chdir(gameDirectory == null ? Tools.DIR_GAME_NEW : gameDirectory.getAbsolutePath());
         userArgs.add(0,"java"); //argv[0] is the program name according to C standard.
 
-        mc.snakenest.launcher.android.snaken3st.GameCrashReports.recordLaunch(activity,gameDirectory,runtimeHome);
-        mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.addToken(activity, gameDirectory, userArgs);
+        if (!benchmark) mc.snakenest.launcher.android.snaken3st.GameCrashReports.recordLaunch(activity,gameDirectory,runtimeHome);
+        if (!benchmark) mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.addToken(activity, gameDirectory, userArgs);
         final int exitCode;
         try { exitCode = VMLauncher.launchJVM(userArgs.toArray(new String[0])); }
-        finally { mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.sealAfterExit(activity, gameDirectory); }
+        finally { if (!benchmark) mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.sealAfterExit(activity, gameDirectory); }
         Logger.appendToLog("Java Exit code: " + exitCode);
+        if (benchmark) return exitCode;
         if (exitCode != 0) mc.snakenest.launcher.android.ExitActivity.showExitMessage(activity,exitCode,false);
 
         Tools.fullyExit();
+        return exitCode;
     }
 
     /**
