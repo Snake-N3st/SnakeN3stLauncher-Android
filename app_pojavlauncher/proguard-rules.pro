@@ -25,3 +25,6 @@
  -keep class mc.snakenest.launcher.android.prefs.screens** {*;}
 
 
+
+# Zstd JNI links these exact Java class and method names.
+-keep class com.github.luben.zstd.** { *; }

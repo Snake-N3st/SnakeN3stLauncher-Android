@@ -41,6 +41,69 @@ class ModpackBatchDownloaderTest {
                 .thenReturn(new RawResponse(200, new ByteArrayInputStream(content)));
     }
 
+    private static byte[] encodedFrame(ManifestFile file, byte[] compressed, String suffix) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(bytes("SN3B2\n" + file.hash() + " " + file.size() + " " + compressed.length + " zstd\n"));
+        out.write(compressed); out.write(bytes(suffix)); return out.toByteArray();
+    }
+
+    @Test void decompressesMixedBatchAndReportsExpandedProgress() throws Exception {
+        ManifestFile a = file("alpha".repeat(10000)), b = file("beta");
+        byte[] compressed = com.github.luben.zstd.Zstd.compress(bytes(a.path()));
+        respond(encodedFrame(a, compressed, b.hash() + " 4 4 identity\nbeta"));
+        java.util.concurrent.atomic.AtomicLong progress = new java.util.concurrent.atomic.AtomicLong();
+        downloader.fetch("pack", List.of(a,b), null, cache, progress::addAndGet);
+        assertEquals(a.path(), Files.readString(cache.resolve(a.hash())));
+        assertEquals(b.path(), Files.readString(cache.resolve(b.hash())));
+        assertEquals(a.size()+b.size(),progress.get());
+    }
+
+    @Test void fallsBackToOriginalAfterCorruptCompressionWithoutDoubleCounting() throws Exception {
+        ManifestFile a = file("alpha".repeat(10000)), b=file("beta");
+        byte[] compressed = com.github.luben.zstd.Zstd.compress(bytes(a.path())); compressed[0]=0;
+        respond(encodedFrame(a,compressed,b.hash()+" 4 4 identity\nbeta"));
+        when(api.downloadBlob(eq("pack"),eq(a.hash()),isNull())).thenReturn(new RawResponse(200,new ByteArrayInputStream(bytes(a.path()))));
+        when(api.downloadBlob(eq("pack"),eq(b.hash()),isNull())).thenReturn(new RawResponse(200,new ByteArrayInputStream(bytes(b.path()))));
+        java.util.concurrent.atomic.AtomicLong progress=new java.util.concurrent.atomic.AtomicLong();
+        downloader.fetch("pack",List.of(a,b),null,cache,progress::addAndGet);
+        assertEquals(a.path(),Files.readString(cache.resolve(a.hash())));
+        assertEquals(b.path(),Files.readString(cache.resolve(b.hash())));
+        assertEquals(a.size()+b.size(),progress.get());
+    }
+
+    @Test void oversizedZstdWindowFallsBackToOriginal() throws Exception {
+        ManifestFile a=file("alpha".repeat(500000));
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try (var encoder=new com.github.luben.zstd.ZstdOutputStreamNoFinalizer(out)) {
+            encoder.setWindowLog(21);encoder.write(bytes(a.path()));
+        }
+        respond(encodedFrame(a,out.toByteArray(),""));
+        when(api.downloadBlob(eq("pack"),eq(a.hash()),isNull())).thenReturn(new RawResponse(200,new ByteArrayInputStream(bytes(a.path()))));
+        downloader.fetch("pack",List.of(a),null,cache);
+        verify(api).downloadBlob("pack",a.hash(),null);
+        assertEquals(a.path(),Files.readString(cache.resolve(a.hash())));
+    }
+
+    @Test void rejectsCompressedTruncationCorruptionAndExpandedSizeMismatch() throws Exception {
+        ManifestFile a = file("alpha".repeat(10000));
+        when(api.downloadBlob(eq("pack"),eq(a.hash()),isNull())).thenAnswer(call -> new RawResponse(503,new ByteArrayInputStream(new byte[0])));
+        byte[] compressed = com.github.luben.zstd.Zstd.compress(bytes(a.path()));
+        for (long declaredSize : new long[]{a.size()-1,a.size()+1}) {
+            ManifestFile bad = new ManifestFile(a.path(),a.hash(),declaredSize,null);
+            respond(encodedFrame(bad,compressed,""));
+            assertThrows(IOException.class, () -> downloader.fetch("pack",List.of(bad),null,cache));
+            assertFalse(Files.exists(cache.resolve(a.hash())));
+        }
+        byte[] truncated = java.util.Arrays.copyOf(compressed,compressed.length-1);
+        respond(encodedFrame(a,truncated,""));
+        assertThrows(IOException.class, () -> downloader.fetch("pack",List.of(a),null,cache));
+        assertFalse(Files.exists(cache.resolve(a.hash())));
+        compressed[0]=0;
+        respond(encodedFrame(a,compressed,""));
+        assertThrows(IOException.class, () -> downloader.fetch("pack",List.of(a),null,cache));
+        assertFalse(Files.exists(cache.resolve(a.hash())));
+    }
+
     @Test void deduplicatesAndSkipsExternalFilesWithoutClosingBatchBetweenEntries() throws Exception {
         ManifestFile a = file("alpha"), b = file("beta");
         respond(frame(List.of(a, b)));

@@ -271,6 +271,7 @@ afterEvaluate {
 
 dependencies {
     implementation project(':sn3-core')
+    implementation 'com.github.luben:zstd-jni:1.5.7-7@aar'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
     implementation 'commons-codec:commons-codec:1.15'

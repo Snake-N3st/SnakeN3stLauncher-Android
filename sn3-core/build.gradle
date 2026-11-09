@@ -2,6 +2,8 @@ plugins { id 'java-library' }
 repositories { mavenCentral() }
 java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 dependencies {
+    compileOnly 'com.github.luben:zstd-jni:1.5.7-7'
+    testImplementation 'com.github.luben:zstd-jni:1.5.7-7'
     api 'com.google.code.gson:gson:2.11.0'
     api 'net.i2p.crypto:eddsa:0.3.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.14.2'

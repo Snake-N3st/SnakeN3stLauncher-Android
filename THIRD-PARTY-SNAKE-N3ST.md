@@ -11,3 +11,5 @@ Dépendances ajoutées :
 - Mockito 5.14.2 — MIT (tests uniquement)
 
 Les notices, licences et crédits Amethyst/PojavLauncher restent applicables, voir `README.amethyst.md` et les fichiers de licence existants. FlowUpdater et OpenLauncherLib ne sont pas embarqués par ce portage.
+
+Zstd-JNI 1.5.7-7 (https://github.com/luben/zstd-jni) : BSD-2-Clause ; libzstd 1.5.7 : BSD-3-Clause. Les licences complètes sont embarquées dans `licenses/zstd-jni-LICENSE` et `licenses/zstd-LICENSE`.

@@ -119,6 +119,7 @@ public final class ModpackApiClient {
         lastBatchSecond = signed.timestamp();
         Map<String, String> params = signed.toQueryParams();
         params.put("hashes", String.join(",", hashes));
+        params.put("encoding", "zstd");
         return http.getRaw(Uris.withQuery(baseUrl.resolve(path), params));
     }
 
