@@ -77,19 +77,35 @@ public final class Sn3GameBridge {
     private static PreparedLaunch prepare(LauncherActivity activity, SnakeRepository r, String slug, boolean repair) throws Exception {
         if (isRunning(activity)) throw new IllegalStateException("Un jeu est déjà en cours. Ferme-le avant de modifier une instance.");
         r.requireOnline(slug);
-        ModpackManifest m = r.sync(slug, repair);
-        r.status = "Vérification des mods…"; r.changed(); r.checkBlacklist(slug);
+        ModpackManifest m = r.manifest(slug);
+        r.beginInstallation(slug);
         String username = r.auth().fetchUsername(r.requireSession());
         if (!username.matches("[A-Za-z0-9_]{1,16}")) throw new IllegalStateException("Pseudo Minecraft invalide.");
         r.catalog.cacheUsername(r.requireSession().playerId(), username);
-        String version = prepareLoader(activity, r, m);
+        // Complete any external installer before starting concurrent writes: the legacy
+        // installer still exits its process, so an in-flight instance sync must not overlap it.
+        String loaderVersion = prepareLoader(activity, r, m);
+        if (loaderVersion == null) return null;
+        String[] installedVersion = new String[1];
+        // The instance files and shared Minecraft/runtime files have separate destinations.
+        // One verified manifest feeds both branches; neither can publish completion alone.
+        mc.snakenest.launcher.util.ParallelDownloadBatch.run(List.of(
+                () -> { r.sync(slug, m, repair); r.checkBlacklist(slug); },
+                () -> { installedVersion[0] = prepareMinecraft(activity, r, slug, loaderVersion, username); }
+        ), 2, () -> { });
+        String version = installedVersion[0];
         if (version == null) return null;
+        r.markInstalled(slug, version);
+        r.catalog.saveManifest(slug, m);
+        return new PreparedLaunch(version, r.settings(slug));
+    }
+
+    private static String prepareMinecraft(LauncherActivity activity, SnakeRepository r, String slug, String version, String username) throws Exception {
         String json = DownloadUtils.downloadString(LauncherPreferences.PREF_VERSION_REPOS);
         JMinecraftVersionList list = Tools.GLOBAL_GSON.fromJson(json, JMinecraftVersionList.class);
         ExtraCore.setValue(ExtraConstants.RELEASE_TABLE, list);
         JMinecraftVersionList.Version metadata = null;
         for (JMinecraftVersionList.Version v : list.versions) if (version.equals(v.id)) metadata = v;
-        ModpackSettings settings = r.settings(slug);
         String id = UUID.nameUUIDFromBytes(("sn3:" + slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         LauncherProfiles.load();
         MinecraftProfile existing = LauncherProfiles.mainProfileJson.profiles.get(id);
@@ -108,12 +124,8 @@ public final class Sn3GameBridge {
         account.save(new File(Tools.DIR_ACCOUNT_NEW, accountFile + ".json").toString());
         PojavProfile.setCurrentProfile(activity, accountFile);
         r.status = "Installation de Minecraft et du runtime…"; r.changed();
-        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1,
-                R.string.sn3_install_minecraft);
         new MinecraftDownloader().installSnakeVersion(activity, metadata, version);
-        r.markInstalled(slug, version);
-        r.catalog.saveManifest(slug, m);
-        return new PreparedLaunch(version, settings);
+        return version;
     }
 
     /** No authentication, synchronization, metadata lookup or downloader is reachable here. */

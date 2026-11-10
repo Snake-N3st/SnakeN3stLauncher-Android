@@ -302,7 +302,10 @@ final class SnakeRepository {
     Path instance(String slug) { requireSlug(slug); return dirs.instance(slug); }
     static void requireSlug(String slug) { if (slug == null || !slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*")) throw new IllegalArgumentException("Identifiant de modpack invalide"); }
     ModpackManifest sync(String slug, boolean repair) throws Exception {
-        ModpackManifest m = manifest(slug); Path dir = instance(slug);
+        return sync(slug, manifest(slug), repair);
+    }
+    ModpackManifest sync(String slug, ModpackManifest m, boolean repair) throws Exception {
+        Path dir = instance(slug);
         beginInstallation(slug);
         new SnakeJvmSettings(context).initialFlags(slug);
         ModpackSettingsStore settings = new ModpackSettingsStore(dirs);
