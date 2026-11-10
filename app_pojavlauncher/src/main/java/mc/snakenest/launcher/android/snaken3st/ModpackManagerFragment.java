@@ -26,9 +26,11 @@ public final class ModpackManagerFragment extends Fragment {
     private String slug;
     private int page;
     private boolean autoInstall;
-    private boolean wasBusy;
+    private long observedCompletedOperations;
     private int scanGeneration;
     private boolean scanning;
+    private boolean rescanRequested;
+    private boolean changingLocalMod;
     private SnakeModBrowser browser;
     private androidx.activity.OnBackPressedCallback browserBack;
     private List<LocalMod> mods = List.of();
@@ -43,14 +45,16 @@ public final class ModpackManagerFragment extends Fragment {
     private record LocalMod(Path file, InstalledModInfo info, boolean managed, String project, android.graphics.Bitmap icon) { }
     private final Runnable observer = () -> {
         if (!ready()) return;
-        boolean finished = wasBusy && !repo.busy;
-        wasBusy = repo.busy; updateState();
-        if (finished) { scanMods(); renderPage(); }
+        long completed=repo.completedOperations;
+        boolean finished = observedCompletedOperations != completed;
+        observedCompletedOperations = completed; updateState();
+        if (finished) { scanMods(); if(page!=1)renderPage(); }
     };
     private final ProgressListener progressListener = new ProgressListener() {
-        @Override public void onProgressStarted() { onMain(() -> { progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); }); }
+        @Override public void onProgressStarted() { onMain(() -> { if(changingLocalMod)return; progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); }); }
         @Override public void onProgressUpdated(int percent, int resource, Object... arguments) {
             onMain(() -> {
+                if(changingLocalMod)return;
                 progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(percent < 0);
                 if (percent >= 0) progress.setProgress(percent);
                 try { progressText.setText(getString(resource, arguments)); }
@@ -119,10 +123,11 @@ public final class ModpackManagerFragment extends Fragment {
         }
         tabs.setOnTabChangedListener(tag -> { page = Integer.parseInt(tag); content = pages[page]; renderPage(); });
         tabs.setCurrentTab(Math.max(0,Math.min(2,page))); content = pages[page];
+        observedCompletedOperations=repo.completedOperations;
         updateState(); renderPage(); scanMods();
     }
     @Override public void onResume() {
-        super.onResume(); repo.addScreenObserver(observer); wasBusy = repo.busy;
+        super.onResume(); repo.addScreenObserver(observer); observer.run();
         ProgressKeeper.addListener("sn3", progressListener);
         downloadRows.start();
         updateState();
@@ -133,7 +138,7 @@ public final class ModpackManagerFragment extends Fragment {
         downloadRows.stop();
         super.onPause();
     }
-    @Override public void onDestroyView() { scanGeneration++; scanning = false; super.onDestroyView(); }
+    @Override public void onDestroyView() { scanGeneration++; scanning = false; rescanRequested=false; changingLocalMod=false; super.onDestroyView(); }
     private LauncherActivity host() { return activity; }
     boolean ready() { return isAdded() && getView() != null; }
     void onMain(Runnable action) { repo.main.post(() -> { if (ready()) action.run(); }); }
@@ -144,19 +149,24 @@ public final class ModpackManagerFragment extends Fragment {
         boolean running = Sn3GameBridge.isRunning(requireContext());
         state.setText(repo.removedPacks.contains(slug)?"Retiré du site":repo.offlineMode?"Hors connexion · téléchargements indisponibles":repo.busy ? repo.status : running ? "Une partie est en cours" : installed ? "Installé sur cet appareil" : "Non installé ou installation à terminer");
         install.setText(repo.busy ? "Annuler" : installed ? "Réparer" : "Installer");
-        install.setVisibility(page==0||repo.busy?View.VISIBLE:View.GONE);
+        install.setVisibility(page==0||repo.busy&&!changingLocalMod?View.VISIBLE:View.GONE);
         getView().findViewById(R.id.sn3_manager_description).setVisibility(page==0?View.VISIBLE:View.GONE);
         install.setEnabled(!running && (repo.busy || !repo.localOnly(slug))); play.setVisibility(installed && page==0 ? View.VISIBLE : View.GONE); play.setEnabled(!repo.busy && !running);
         offline.setVisibility(!repo.busy && repo.error != null && repo.session != null && repo.offlineAvailable && !repo.offlineMode ? View.VISIBLE : View.GONE);
         error.setText(repo.error); error.setVisibility(repo.error == null ? View.GONE : View.VISIBLE);
         if (!repo.busy) { progress.setVisibility(View.GONE); progressText.setVisibility(View.GONE); progressText.setText(""); }
-        for (View control : mutationControls) control.setEnabled(!repo.busy && !running && !(repo.localOnly(slug) && "sn3-online".equals(control.getTag())));
+        for (View control : mutationControls) {
+            boolean allowed=!repo.busy&&!running&&!(page==1&&scanning)&&!(repo.localOnly(slug)&&"sn3-online".equals(control.getTag()));
+            if(changingLocalMod&&page==1)control.setClickable(allowed);
+            else {control.setEnabled(allowed);control.setClickable(true);}
+        }
     }
-    void operation(String label, SnakeRepository.Work work) {
+    void operation(String label,SnakeRepository.Work work){operation(label,work,true);}
+    private void operation(String label, SnakeRepository.Work work,boolean showProgress) {
         if (repo.busy) return;
         if (Sn3GameBridge.isRunning(requireContext())) { error.setText("Ferme Minecraft avant de modifier cette instance."); error.setVisibility(View.VISIBLE); return; }
         if (repo.session == null || repo.sessionRejected && !repo.offlineMode) { error.setText("Reviens au compte pour valider ta connexion avant de continuer."); error.setVisibility(View.VISIBLE); return; }
-        repo.work(label, work);
+        repo.work(label, work,showProgress);
     }
     private void showPage(int selected) { if (tabs.getCurrentTab() == selected) renderPage(); else tabs.setCurrentTab(selected); }
     private void renderPage() {
@@ -211,7 +221,7 @@ public final class ModpackManagerFragment extends Fragment {
         Button importJar=button(content,"Importer un .jar",browser::pickImport,true);importJar.setTag("sn3-online");
         if (!scanning && mods.isEmpty()) text("Aucun mod installé. Ajoute un mod depuis Modrinth.", 14, false);
         for (LocalMod mod : mods) {
-            LinearLayout card = new LinearLayout(requireContext()); card.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout card = new LinearLayout(requireContext()); card.setOrientation(LinearLayout.VERTICAL);card.setTag(mod);
             card.setPadding(dp(10), dp(8), dp(10), dp(8));
             android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
             background.setColor(getResources().getColor(R.color.background_bottom_bar)); background.setCornerRadius(dp(8)); card.setBackground(background);
@@ -227,15 +237,19 @@ public final class ModpackManagerFragment extends Fragment {
             String filename = mod.file().getFileName().toString(); boolean disabled = filename.endsWith(".disabled");
             Switch enabled = new Switch(requireContext()); enabled.setChecked(!disabled); enabled.setContentDescription((disabled?"Activer ":"Désactiver ")+mod.info().name());
             heading.addView(enabled); mutationControls.add(enabled);
-            enabled.setOnClickListener(control -> { enabled.setChecked(!disabled); changeMod(mod,false); });
+            enabled.setOnClickListener(control -> changeMod((LocalMod)card.getTag(),false));
             LinearLayout actions = new LinearLayout(requireContext()); card.addView(actions);
             Button version = button(actions,"Versions",()-> {
-                browser.openInstalled(mod.file(),mod.project(),mod.info().name(),mod.info().author());
+                LocalMod current=(LocalMod)card.getTag();
+                browser.openInstalled(current.file(),current.project(),current.info().name(),current.info().author());
             },true);
             version.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));
-            Button remove = button(actions,"Supprimer",()->new AlertDialog.Builder(requireContext()).setTitle("Supprimer ce mod ?")
-                .setMessage("Retirer « "+mod.info().name()+" » de cette instance ?"+(mod.managed()?" Réparer permettra de restaurer la version du pack.":""))
-                .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(dialog,which)->changeMod(mod,true)).show(),true);
+            Button remove = button(actions,"Supprimer",()->{
+                LocalMod current=(LocalMod)card.getTag();
+                new AlertDialog.Builder(requireContext()).setTitle("Supprimer ce mod ?")
+                    .setMessage("Retirer « "+current.info().name()+" » de cette instance ?"+(current.managed()?" Réparer permettra de restaurer la version du pack.":""))
+                    .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(dialog,which)->changeMod((LocalMod)card.getTag(),true)).show();
+            },true);
             remove.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));
         }
     }
@@ -257,9 +271,10 @@ public final class ModpackManagerFragment extends Fragment {
         } catch(Exception ignored) { return null; }
     }
     private void scanMods() {
-        if (!ready() || scanning) return;
-        scanning = true; int generation = ++scanGeneration;
-        if (page == 1) renderPage();
+        if (!ready()) return;
+        if (scanning) { rescanRequested=true; return; }
+        scanning = true; rescanRequested=false; int generation = ++scanGeneration;
+        updateState();
         repo.executor.execute(() -> {
             List<LocalMod> loaded = new ArrayList<>();
             try {
@@ -278,14 +293,41 @@ public final class ModpackManagerFragment extends Fragment {
                         loaded.add(new LocalMod(file, info, managed.contains("mods/"+base), project, readIcon(file,info.iconPath())));
                     }
                 }
-                onMain(() -> { if (generation == scanGeneration) { scanning = false; mods = List.copyOf(loaded); if (page == 1) renderPage(); } });
+                onMain(() -> { if (generation == scanGeneration) { scanning = false; if(rescanRequested){scanMods();return;} boolean patched=patchLocalModRows(loaded);mods = List.copyOf(loaded);changingLocalMod=false;if(page==1&&!patched)renderPage();else updateState(); } });
             } catch (Exception exception) {
-                onMain(() -> { if (generation == scanGeneration) { scanning = false; if (page == 1) renderPage(); error.setText("Lecture des mods impossible : " + exception.getMessage()); error.setVisibility(View.VISIBLE); } });
+                onMain(() -> { if (generation == scanGeneration) { scanning = false; if(rescanRequested){scanMods();return;} changingLocalMod=false;updateState(); error.setText("Lecture des mods impossible : " + exception.getMessage()); error.setVisibility(View.VISIBLE); } });
             }
         });
     }
+    /** Patch toggle/removal results without detaching cards, losing scroll, or resetting a switch animation. */
+    private boolean patchLocalModRows(List<LocalMod> loaded) {
+        if(page!=1||!changingLocalMod)return false;
+        Map<String,LocalMod> next=new LinkedHashMap<>();for(LocalMod mod:loaded)next.put(ModOverrides.canonicalFilename(mod.file().getFileName().toString()),mod);
+        Set<String> current=new HashSet<>();for(LocalMod mod:mods)current.add(ModOverrides.canonicalFilename(mod.file().getFileName().toString()));
+        if(!current.containsAll(next.keySet()))return false;
+        for(int i=content.getChildCount()-1;i>=0;i--) {
+            View view=content.getChildAt(i);if(!(view.getTag() instanceof LocalMod old))continue;
+            LocalMod replacement=next.get(ModOverrides.canonicalFilename(old.file().getFileName().toString()));
+            if(replacement==null) {
+                mutationControls.removeIf(control->{for(android.view.ViewParent parent=control.getParent();parent!=null;parent=parent.getParent())if(parent==view)return true;return false;});
+                content.removeView(view);continue;
+            }
+            view.setTag(replacement);
+            LinearLayout heading=(LinearLayout)((LinearLayout)view).getChildAt(0);
+            LinearLayout details=(LinearLayout)heading.getChildAt(1);
+            ((TextView)details.getChildAt(0)).setText(replacement.info().name());
+            ((TextView)details.getChildAt(1)).setText((replacement.info().version()==null?"Version inconnue":replacement.info().version())+(replacement.managed()?" · Pack":" · Personnel"));
+            Switch toggle=(Switch)heading.getChildAt(2);boolean enabled=!replacement.file().getFileName().toString().endsWith(".disabled");
+            if(toggle.isChecked()!=enabled)toggle.setChecked(enabled);
+            toggle.setContentDescription((enabled?"Désactiver ":"Activer ")+replacement.info().name());
+        }
+        ((TextView)content.getChildAt(0)).setText(loaded.size()+" mods installés");
+        return true;
+    }
     private void changeMod(LocalMod mod, boolean remove) {
-        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> {repo.changeMod(slug, mod.file(), remove);browser.dirty();});
+        if(repo.busy||scanning||repo.session==null||repo.sessionRejected&&!repo.offlineMode||Sn3GameBridge.isRunning(requireContext())){scanMods();return;}
+        changingLocalMod=true;
+        operation(remove ? "Suppression du mod…" : "Modification du mod…", () -> {repo.changeMod(slug, mod.file(), remove);browser.dirty();},false);
     }
     private void searchPage() {browser.render(content);}
     private void settingsDialog() {

@@ -48,6 +48,7 @@ final class SnakeRepository {
     volatile List<Post> posts = List.of();
     volatile String loginUrl;
     volatile boolean busy;
+    volatile long completedOperations;
     private SnakeRepository(Context c) {
         context = c; prefs = c.getSharedPreferences("sn3", Context.MODE_PRIVATE);
         dirs = new AppDirs(c.getNoBackupFilesDir().toPath().resolve("snake-n3st"));
@@ -69,11 +70,14 @@ final class SnakeRepository {
         for (Runnable listener : screenObservers) if (listener != current) listener.run();
     }); }
     interface Work { void run() throws Exception; }
-    synchronized void work(String label, Work work) {
+    void work(String label,Work work){work(label,work,true);}
+    synchronized void work(String label, Work work,boolean showProgress) {
         if (busy) return;
         busy = true; cancellationRequested = false; status = label; error = null; changed();
-        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, mc.snakenest.launcher.android.R.string.sn3_operation_progress, label);
-        mc.snakenest.launcher.android.services.ProgressService.startService(context);
+        if(showProgress) {
+            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, mc.snakenest.launcher.android.R.string.sn3_operation_progress, label);
+            mc.snakenest.launcher.android.services.ProgressService.startService(context);
+        }
         task = executor.submit(() -> {
             worker = Thread.currentThread();
             try {
@@ -83,8 +87,8 @@ final class SnakeRepository {
             catch (InterruptedException e) { Thread.currentThread().interrupt(); status = "Annulé"; }
             catch (Exception e) { if (session != null) offlineAvailable = true; error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); status = "Échec"; }
             finally {
-                worker = null; Thread.interrupted(); busy = false; loginUrl = null;
-                mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, -1);
+                worker = null; Thread.interrupted(); busy = false; loginUrl = null; completedOperations++;
+                if(showProgress)mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, -1);
                 changed();
             }
         });
@@ -311,7 +315,7 @@ final class SnakeRepository {
         ModpackSettingsStore settings = new ModpackSettingsStore(dirs);
         if (!Files.exists(dirs.modpackSettingsFile(slug))) settings.save(slug, ModpackSettings.defaults(m.defaultMemoryMb(), m.defaultJvmArgs()));
         if (pinKey != null) SensitiveFileVault.decryptAll(dir, pinKey);
-        try (ModpackProgress progress = new ModpackProgress(path -> { status = "Application : " + path; changed(); })) {
+        try (ModpackProgress progress = new ModpackProgress(path -> { status = path==null?"Préparation en cours…":"Application : " + path; changed(); })) {
             if (repair) {
                 modOverrides(slug).resetManaged(dir);
                 new LocalManifestStore().clear(dir);

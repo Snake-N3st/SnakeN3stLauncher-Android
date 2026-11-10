@@ -48,7 +48,11 @@ final class ModBrowserChecks {
             fixture.session=new mc.snakenest.launcher.auth.PlayerSession(mc.snakenest.launcher.crypto.Ed25519KeyPair.fromSeed(new byte[32]),999999,fixture.client());
             fixture.catalog.cacheUsername(999999,"FixturePlayer");
             activity=(LauncherActivity)test.startActivitySync(new Intent(target,LauncherActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            LauncherActivity host=activity;test.waitForIdleSync();
+            LauncherActivity host=activity;
+            test.runOnMainSync(()->{host.setShowWhenLocked(true);host.setTurnScreenOn(true);host.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);});
+            boolean resumed=false;
+            for(int i=0;i<100&&!resumed;i++){test.waitForIdleSync();boolean[] active={false};test.runOnMainSync(()->active[0]=host.getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)&&!host.getSupportFragmentManager().isStateSaved());resumed=active[0];if(!resumed)Thread.sleep(30);}
+            if(!resumed)throw new IllegalStateException("Fixture activity did not resume");
             SnakeRepository repository=fixture;
             test.runOnMainSync(()->{repository.offlineMode=false;ModpackManagerFragment.open(host,"test-pack",false);host.getSupportFragmentManager().executePendingTransactions();});
             ModpackManagerFragment[] manager={null};
@@ -76,6 +80,27 @@ final class ModBrowserChecks {
             screenshot(test,host,target,"sn3-mods-versions-check.png");
             test.runOnMainSync(()->host.getOnBackPressedDispatcher().onBackPressed());test.waitForIdleSync();check(contains(manager[0].requireView(),"Voir sur Modrinth"));passed++;
             test.runOnMainSync(()->host.getOnBackPressedDispatcher().onBackPressed());test.waitForIdleSync();check(contains(manager[0].requireView(),"Découvrir des mods"));passed++;
+            Path jar=repository.instance("test-pack").resolve("mods/refresh-fixture.jar");Files.createDirectories(jar.getParent());
+            try(var archive=new java.util.zip.ZipOutputStream(Files.newOutputStream(jar))){archive.putNextEntry(new java.util.zip.ZipEntry("fabric.mod.json"));archive.write("{\"schemaVersion\":1,\"id\":\"refresh_fixture\",\"name\":\"Refresh fixture\",\"version\":\"1.0.0\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));archive.closeEntry();}
+            test.runOnMainSync(()->{((android.widget.TabHost)manager[0].requireView().findViewById(R.id.sn3_manager_tabs)).setCurrentTab(1);manager[0].refreshLocalMods();manager[0].refreshLocalMods();});
+            awaitScan(test,manager[0]);check(contains(manager[0].requireView(),"Refresh fixture"));passed++;
+            android.widget.Switch[] originalSwitch={null};test.runOnMainSync(()->originalSwitch[0]=modSwitch(manager[0].requireView()));
+            // Hold the UI thread until the quick disk operation finishes, reproducing the missed busy transition.
+            test.runOnMainSync(()->{check(modSwitch(manager[0].requireView()).isChecked());modSwitch(manager[0].requireView()).performClick();awaitOperation(repository);});
+            awaitScan(test,manager[0]);check(Files.exists(jar.resolveSibling("refresh-fixture.jar.disabled")));passed++;
+            test.runOnMainSync(()->check(!modSwitch(manager[0].requireView()).isChecked()));passed++;
+            test.runOnMainSync(()->check(modSwitch(manager[0].requireView())==originalSwitch[0]));passed++;
+            var workerHeld=new java.util.concurrent.CountDownLatch(1);var releaseWorker=new java.util.concurrent.CountDownLatch(1);
+            repository.executor.execute(()->{workerHeld.countDown();try{releaseWorker.await();}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+            check(workerHeld.await(2,java.util.concurrent.TimeUnit.SECONDS));
+            try {
+                test.runOnMainSync(()->modSwitch(manager[0].requireView()).performClick());test.waitForIdleSync();
+                test.runOnMainSync(()->check(manager[0].requireView().findViewById(R.id.sn3_manager_install).getVisibility()==android.view.View.GONE&&modSwitch(manager[0].requireView())==originalSwitch[0]&&originalSwitch[0].isEnabled()&&!originalSwitch[0].isClickable()&&mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.getTaskCount()==0));passed++;
+            } finally {releaseWorker.countDown();}
+            awaitOperation(repository);awaitScan(test,manager[0]);test.runOnMainSync(()->check(modSwitch(manager[0].requireView()).isChecked()&&modSwitch(manager[0].requireView())==originalSwitch[0]));check(Files.exists(jar));passed++;
+            test.runOnMainSync(()->{try{var mods=(java.util.List<?>)field(manager[0],"mods");Object mod=mods.get(0);var change=ModpackManagerFragment.class.getDeclaredMethod("changeMod",mod.getClass(),boolean.class);change.setAccessible(true);change.invoke(manager[0],mod,true);awaitOperation(repository);}catch(Exception failure){throw new RuntimeException(failure);}});
+            awaitScan(test,manager[0]);check(!Files.exists(jar)&&!contains(manager[0].requireView(),"Refresh fixture")&&contains(manager[0].requireView(),"0 mods installés"));passed++;
+            check(host.getSupportFragmentManager().findFragmentById(R.id.container_fragment)==manager[0]);passed++;
             check(requests.get()==0);passed++;result.putBoolean("success",true);
         } catch(Throwable failure){result.putBoolean("success",false);result.putString("message",failure.getClass().getSimpleName()+": "+failure.getMessage());}
         finally {
@@ -93,6 +118,12 @@ final class ModBrowserChecks {
             test.finish(result.getBoolean("success")?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
         }
     }
+    private static void awaitOperation(SnakeRepository repository){try{repository.task.get(2,java.util.concurrent.TimeUnit.SECONDS);}catch(Exception failure){throw new RuntimeException(failure);}}
+    private static void awaitScan(Instrumentation test,ModpackManagerFragment manager)throws Exception {
+        for(int i=0;i<100;i++){test.waitForIdleSync();boolean[] ready={false};test.runOnMainSync(()->{try{ready[0]=!(boolean)field(manager,"scanning");}catch(Exception failure){throw new RuntimeException(failure);}});if(ready[0])return;Thread.sleep(30);}
+        throw new AssertionError("Mods scan did not complete");
+    }
+    private static android.widget.Switch modSwitch(android.view.View view){if(view instanceof android.widget.Switch control)return control;if(view instanceof android.view.ViewGroup group)for(int i=0;i<group.getChildCount();i++){var found=modSwitch(group.getChildAt(i));if(found!=null)return found;}return null;}
     private static Object field(Object target,String name)throws Exception{var field=target.getClass().getDeclaredField(name);field.setAccessible(true);return field.get(target);}
     private static void set(Object target,String name,Object value)throws Exception{var field=target.getClass().getDeclaredField(name);field.setAccessible(true);field.set(target,value);}
     private static boolean contains(android.view.View view,String text){if(view instanceof android.widget.TextView label&&label.getText().toString().contains(text))return true;if(view instanceof android.view.ViewGroup group)for(int i=0;i<group.getChildCount();i++)if(contains(group.getChildAt(i),text))return true;return false;}
