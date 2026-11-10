@@ -29,11 +29,16 @@ final class ProgressChecks {
             pack.onDownloadProgress(50,100);
             check(records[0].progress==50&&records[2].progress==60&&records[1].progress==-1,"three independent records");checks++;
             pack.onDeleted("obsolete.txt");
-            check(records[1].resource==R.string.sn3_apply_delete&&records[0].progress==50&&records[2].progress==60,"delete must not replace either transfer");checks++;
+            check(records[1].resource==R.string.sn3_apply_file&&records[0].progress==50&&records[2].progress==60,"delete must not replace either transfer");checks++;
             check(ProgressKeeper.getTaskCount()==baseline+3,"all active records count independently");checks++;
             var late=new Recorder();ProgressKeeper.addListener(keys[0],late);
             try {check(late.starts==1&&late.progress==50,"observer reconnect gets current data");checks++;}
             finally {ProgressKeeper.removeListener(keys[0],late);}
+            pack.onFileStarted("server.dat",100);pack.onFileDone("mods/example.jar");
+            check(file.get().equals("server.dat")&&ProgressKeeper.getTaskCount()==baseline+3,"unfinished file keeps its own row");checks++;
+            pack.onFileDone("server.dat");
+            check(file.get()==null&&ProgressKeeper.getTaskCount()==baseline+2,"server.dat row ends immediately, even while both downloads remain active");checks++;
+            pack.onDeleted("old.dat");check(ProgressKeeper.getTaskCount()==baseline+2,"completed deletion does not start a spinner");checks++;
             pack.close();check(ProgressKeeper.getTaskCount()==baseline+1,"pack completion leaves Minecraft active");checks++;
             int starts=records[0].starts;pack.onDownloadProgress(75,100);pack.onFileStarted("late.jar",1);
             check(records[0].starts==starts&&ProgressKeeper.getTaskCount()==baseline+1,"late worker updates cannot resurrect ended rows");checks++;
@@ -56,6 +61,8 @@ final class ProgressChecks {
                     });checks++;
                     visible.onDownloadProgress(40,100);test.waitForIdleSync();
                     test.runOnMainSync(()->check(((android.widget.ProgressBar)ui[0].findViewWithTag(keys[2]+":bar")).getProgress()==70,"pack callbacks cannot change game UI"));checks++;
+                    visible.onFileDone("example.jar");test.waitForIdleSync();
+                    test.runOnMainSync(()->check(ui[0].findViewWithTag(keys[1]).getVisibility()==android.view.View.GONE&&ui[0].findViewWithTag(keys[2]).getVisibility()==android.view.View.VISIBLE,"completed file spinner disappears before game download ends"));checks++;
                 }
                 test.waitForIdleSync();
                 test.runOnMainSync(()->check(ui[0].findViewWithTag(keys[0]).getVisibility()==android.view.View.GONE&&ui[0].findViewWithTag(keys[2]).getVisibility()==android.view.View.VISIBLE,"ending pack must keep Minecraft row visible"));checks++;
