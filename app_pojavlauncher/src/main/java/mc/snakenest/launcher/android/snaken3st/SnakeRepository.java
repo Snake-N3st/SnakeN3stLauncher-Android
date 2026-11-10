@@ -72,7 +72,7 @@ final class SnakeRepository {
     synchronized void work(String label, Work work) {
         if (busy) return;
         busy = true; cancellationRequested = false; status = label; error = null; changed();
-        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", 0, mc.snakenest.launcher.android.R.string.newdl_starting);
+        mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", -1, mc.snakenest.launcher.android.R.string.sn3_operation_progress, label);
         mc.snakenest.launcher.android.services.ProgressService.startService(context);
         task = executor.submit(() -> {
             worker = Thread.currentThread();
@@ -311,34 +311,16 @@ final class SnakeRepository {
         ModpackSettingsStore settings = new ModpackSettingsStore(dirs);
         if (!Files.exists(dirs.modpackSettingsFile(slug))) settings.save(slug, ModpackSettings.defaults(m.defaultMemoryMb(), m.defaultJvmArgs()));
         if (pinKey != null) SensitiveFileVault.decryptAll(dir, pinKey);
-        try {
+        try (ModpackProgress progress = new ModpackProgress(path -> { status = "Application : " + path; changed(); })) {
             if (repair) {
                 modOverrides(slug).resetManaged(dir);
                 new LocalManifestStore().clear(dir);
             }
             new ModpackSyncEngine(new ModpackFileDownloader(api(), http), new LocalManifestStore())
-                    .sync(slug, dir, m, requireSession(), new SyncProgressListener() {
-                        private volatile int percent;
-                        public void onFileStarted(String path, long size) {
-                            status = "Application : " + path;
-                            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", percent,
-                                    mc.snakenest.launcher.android.R.string.sn3_apply_file, path);
-                            changed();
-                        }
-                        public void onDownloadProgress(long receivedBytes, long totalBytes) {
-                            percent = totalBytes > 0 ? (int) Math.min(99, 99.0 * receivedBytes / totalBytes) : 0;
-                            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", percent,
-                                    mc.snakenest.launcher.android.R.string.sn3_download_progress,
-                                    receivedBytes / 1048576.0, totalBytes / 1048576.0);
-                        }
-                        public void onFileDone(String path) { }
-                        public void onDeleted(String path) { }
-                    }, false, modOverrides(slug).ignoredModPaths());
+                    .sync(slug, dir, m, requireSession(), progress, false, modOverrides(slug).ignoredModPaths());
             // The server manifest stays intact/signed. Reapply explicit local mod choices
             // only after its verified sync, and before any game/blacklist check.
             modOverrides(slug).apply(dir);
-            mc.snakenest.launcher.android.progresskeeper.ProgressKeeper.submitProgress("sn3", 100,
-                    mc.snakenest.launcher.android.R.string.sn3_apply_done);
         } finally { if (pinKey != null) SensitiveFileVault.encryptAll(dir, pinKey); }
         return m;
     }

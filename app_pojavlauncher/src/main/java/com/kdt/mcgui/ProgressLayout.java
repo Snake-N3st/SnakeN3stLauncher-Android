@@ -33,6 +33,8 @@ import java.util.ArrayList;
 public class ProgressLayout extends ConstraintLayout implements View.OnClickListener, TaskCountListener{
     public static final String UNPACK_RUNTIME = "unpack_runtime";
     public static final String DOWNLOAD_MINECRAFT = "download_minecraft";
+    public static final String DOWNLOAD_SNAKE_MODPACK = "sn3_pack_download";
+    public static final String APPLY_SNAKE_MODPACK = "sn3_pack_apply";
     public static final String DOWNLOAD_VERSION_LIST = "download_verlist";
     public static final String AUTHENTICATE_MICROSOFT = "authenticate_microsoft";
     public static final String INSTALL_MODPACK = "install_modpack";
@@ -148,7 +150,8 @@ public class ProgressLayout extends ConstraintLayout implements View.OnClickList
         @Override
         public void onProgressUpdated(int progress, int resid, Object... va) {
             post(()-> {
-                textView.setProgress(progress);
+                textView.setIndeterminate(progress < 0);
+                textView.setProgress(Math.max(0,progress));
                 if(resid != -1) textView.setText(getContext().getString(resid, va));
                 else if(va.length > 0 && va[0] != null)textView.setText((String)va[0]);
                 else textView.setText("");

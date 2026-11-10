@@ -31,7 +31,7 @@ public class ProgressKeeper {
         if(progressListeners != null)
             for(ProgressListener listener : progressListeners) {
                     if(shouldCallStarted) listener.onProgressStarted();
-                    else if(shouldCallEnded) listener.onProgressEnded();
+                    if(shouldCallEnded) listener.onProgressEnded();
                     else listener.onProgressUpdated(progress, resid, va);
             }
     }

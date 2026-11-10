@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="sn3_download_progress">Modpack : %1$.1f Mo / %2$.1f Mo</string>
-    <string name="sn3_apply_file">Application : %1$s</string>
+    <string name="sn3_apply_file">Fichiers du modpack : %1$s</string>
     <string name="sn3_apply_done">Modpack synchronisé</string>
     <string name="sn3_download_mod_progress">%1$s : %2$.1f Mo / %3$.1f Mo</string>
     <string name="sn3_install_minecraft">Installation de Minecraft et du runtime…</string>
+    <string name="sn3_operation_progress">%1$s</string>
+    <string name="sn3_apply_delete">Fichiers du modpack : suppression de %1$s</string>
 </resources>

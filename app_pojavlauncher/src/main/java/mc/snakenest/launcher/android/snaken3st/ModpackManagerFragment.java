@@ -37,6 +37,7 @@ public final class ModpackManagerFragment extends Fragment {
     private final LinearLayout[] pages = new LinearLayout[3];
     private TextView state, progressText, error;
     private ProgressBar progress;
+    private DownloadProgressRows downloadRows;
     private Button install, play, offline;
     private final List<View> mutationControls = new ArrayList<>();
     private record LocalMod(Path file, InstalledModInfo info, boolean managed, String project, android.graphics.Bitmap icon) { }
@@ -57,17 +58,6 @@ public final class ModpackManagerFragment extends Fragment {
             });
         }
         @Override public void onProgressEnded() { onMain(() -> { progress.setVisibility(View.GONE); progressText.setText(repo.status); }); }
-    };
-
-    private final ProgressListener minecraftProgressListener = new ProgressListener() {
-        @Override public void onProgressStarted() { progressListener.onProgressStarted(); }
-        @Override public void onProgressUpdated(int percent, int resource, Object... arguments) {
-            progressListener.onProgressUpdated(percent, resource, arguments);
-        }
-        @Override public void onProgressEnded() { onMain(() -> {
-            if (repo.busy) { progressText.setVisibility(View.VISIBLE); progress.setVisibility(View.VISIBLE); progress.setIndeterminate(true); progressText.setText(repo.status); }
-            else { progress.setVisibility(View.GONE); progressText.setText(""); }
-        }); }
     };
 
     public static void open(LauncherActivity activity, String slug, boolean startInstall) {
@@ -92,6 +82,7 @@ public final class ModpackManagerFragment extends Fragment {
         activity.getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),browserBack);
         state = view.findViewById(R.id.sn3_manager_state);
         progressText = view.findViewById(R.id.sn3_manager_progress_text); error = view.findViewById(R.id.sn3_manager_error);
+        downloadRows=view.findViewById(R.id.sn3_manager_download_rows);
         progress = view.findViewById(R.id.sn3_manager_progress); install = view.findViewById(R.id.sn3_manager_install); play = view.findViewById(R.id.sn3_manager_play);
         offline = view.findViewById(R.id.sn3_manager_offline);
         offline.setOnClickListener(v -> { try { repo.goOffline(); renderPage(); } catch(IllegalStateException failure) { error.setText(failure.getMessage()); error.setVisibility(View.VISIBLE); } });
@@ -133,13 +124,13 @@ public final class ModpackManagerFragment extends Fragment {
     @Override public void onResume() {
         super.onResume(); repo.addScreenObserver(observer); wasBusy = repo.busy;
         ProgressKeeper.addListener("sn3", progressListener);
-        ProgressKeeper.addListener(com.kdt.mcgui.ProgressLayout.DOWNLOAD_MINECRAFT, minecraftProgressListener);
+        downloadRows.start();
         updateState();
         if (autoInstall && !repo.localOnly(slug)) { autoInstall = false; operation("Installation du modpack…", () -> Sn3GameBridge.install(host(), repo, slug)); }
     }
     @Override public void onPause() {
         repo.removeScreenObserver(observer); ProgressKeeper.removeListener("sn3", progressListener);
-        ProgressKeeper.removeListener(com.kdt.mcgui.ProgressLayout.DOWNLOAD_MINECRAFT, minecraftProgressListener);
+        downloadRows.stop();
         super.onPause();
     }
     @Override public void onDestroyView() { scanGeneration++; scanning = false; super.onDestroyView(); }

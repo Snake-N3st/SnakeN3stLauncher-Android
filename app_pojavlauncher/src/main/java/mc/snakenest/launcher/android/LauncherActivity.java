@@ -265,6 +265,8 @@ public class LauncherActivity extends BaseActivity {
         mInstallTracker = new ModloaderInstallTracker(this);
 
         mProgressLayout.observe("sn3");
+        mProgressLayout.observe(ProgressLayout.DOWNLOAD_SNAKE_MODPACK);
+        mProgressLayout.observe(ProgressLayout.APPLY_SNAKE_MODPACK);
         mProgressLayout.observe(ProgressLayout.DOWNLOAD_MINECRAFT);
         mProgressLayout.observe(ProgressLayout.UNPACK_RUNTIME);
         mProgressLayout.observe(ProgressLayout.INSTALL_MODPACK);
