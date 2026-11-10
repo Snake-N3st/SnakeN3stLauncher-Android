@@ -40,11 +40,16 @@ public final class SnakeUi extends ContextWrapper {
         });
         menu.findViewById(R.id.news_button).setOnClickListener(v -> loadNews());
         ((TextView)menu.findViewById(R.id.news_button)).setText("Actualités");
-        ((TextView)menu.findViewById(R.id.install_jar_button)).setText("Actualiser les modpacks");
         menu.findViewById(R.id.install_jar_button).setOnClickListener(v -> {
-            if(repo.session==null) account(); else repo.work("Chargement des modpacks…",repo::refresh);
+            if(UnrestrictedMode.enabled(host)) PersonalVersions.runJar(host, false);
+            else refreshPacks();
         });
-        menu.findViewById(R.id.install_jar_button).setOnLongClickListener(null);
+        menu.findViewById(R.id.install_jar_button).setOnLongClickListener(v -> {
+            if(!UnrestrictedMode.enabled(host)) return false;
+            PersonalVersions.runJar(host, true); return true;
+        });
+        menu.findViewById(R.id.sn3_personal_versions).setOnClickListener(v -> PersonalVersions.show(host));
+        menu.findViewById(R.id.sn3_refresh_modpacks).setOnClickListener(v -> refreshPacks());
         menu.findViewById(R.id.open_files_button).setOnClickListener(v -> {
             ModpackSummary pack=selected(); if(pack==null) selectPack(); else Tools.openPath(host,repo.instance(pack.slug()).toFile(),false);
         });
@@ -91,7 +96,11 @@ public final class SnakeUi extends ContextWrapper {
         var account=(SnakeAccountView)host.findViewById(R.id.sn3_account_button);
         account.setAvatar(repo.player==null?null:repo.player.avatar(),repo.site(),repo.session==null?0:repo.session.playerId(),repo.offlineMode);
         menu.findViewById(R.id.news_button).setEnabled(!repo.offlineMode);
-        ((TextView)menu.findViewById(R.id.install_jar_button)).setText(repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
+        boolean unrestricted=UnrestrictedMode.enabled(host);
+        ((TextView)menu.findViewById(R.id.install_jar_button)).setText(unrestricted?getString(R.string.sn3_run_jar):repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
+        menu.findViewById(R.id.sn3_personal_versions).setVisibility(unrestricted?View.VISIBLE:View.GONE);
+        menu.findViewById(R.id.sn3_refresh_modpacks).setVisibility(unrestricted?View.VISIBLE:View.GONE);
+        ((TextView)menu.findViewById(R.id.sn3_refresh_modpacks)).setText(repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
         var picker=(com.kdt.mcgui.mcModpackSpinner)menu.findViewById(R.id.mc_version_spinner);
         picker.setLocalState(repo.offlineMode,repo.removedPacks);
         picker.submitPacks(repo.packs,pack==null?null:pack.slug(),repo.site(),chosen->{
@@ -121,6 +130,9 @@ public final class SnakeUi extends ContextWrapper {
         if (repo.isInstalled(pack.slug())) repo.work("Préparation de " + pack.name() + "…", () -> Sn3GameBridge.launch(host, repo, pack.slug()));
         else if(repo.localOnly(pack.slug())) notice("Installation indisponible","Ce modpack doit être installé en ligne avant de jouer hors connexion.");
         else ModpackManagerFragment.open(host, pack.slug(), true);
+    }
+    private void refreshPacks() {
+        if(repo.session==null) account(); else repo.work("Chargement des modpacks…",repo::refresh);
     }
     private void selectPack() {
         if(repo.session==null || repo.sessionRejected && !repo.offlineMode) { account(); return; }

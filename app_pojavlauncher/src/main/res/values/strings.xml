@@ -517,4 +517,9 @@
     <string name="angelica_found_sfpew_notice">Angelica mod found, Simple FPE Wrapper not needed</string>
     <string name="use_angle_checkbox">Use ANGLE (might help FPS)</string>
 
+    <string name="sn3_unrestricted_title">Mode débridé</string>
+    <string name="sn3_unrestricted_summary">Ajouter et lancer vos propres versions avec les outils Amethyst, et exécuter un fichier JAR. Les profils personnels restent disponibles si vous désactivez cette option.</string>
+    <string name="sn3_personal_versions">Versions personnelles</string>
+    <string name="sn3_run_jar">Lancer un JAR</string>
+    <string name="sn3_refresh_modpacks">Actualiser les modpacks</string>
 </resources>

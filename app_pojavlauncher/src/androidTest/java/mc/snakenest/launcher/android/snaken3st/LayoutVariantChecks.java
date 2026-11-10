@@ -21,6 +21,8 @@ final class LayoutVariantChecks {
                 var home=LayoutInflater.from(context).inflate(R.layout.fragment_launcher,null,false);
                 if(!(home.findViewById(R.id.mc_version_spinner) instanceof com.kdt.mcgui.mcModpackSpinner))
                     throw new AssertionError("Home must use the Snake modpack picker in every orientation");
+                if(home.findViewById(R.id.sn3_personal_versions)==null || home.findViewById(R.id.sn3_refresh_modpacks)==null)
+                    throw new AssertionError("Every orientation must contain the experimental personal-version tools");
                 passed[0]++;
                 var shell=LayoutInflater.from(context).inflate(R.layout.activity_pojav_launcher,null,false);
                 if(!(shell.findViewById(R.id.sn3_account_button) instanceof SnakeAccountView))

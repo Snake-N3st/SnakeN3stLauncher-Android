@@ -50,6 +50,14 @@ Chaque modpack dispose de son propre répertoire de jeu. Les changements effectu
 
 **Désinstaller supprime l’instance, y compris ses mondes solo et ses réglages locaux.** Une confirmation est demandée avant cette opération ; sauvegardez les fichiers que vous souhaitez garder.
 
+### Versions personnelles et fichiers JAR
+
+Activez **Paramètres → Fonctionnalités expérimentales → Mode débridé**. Le menu principal affiche alors **Versions personnelles** et **Lancer un JAR**. Les outils Amethyst permettent de créer un profil, de choisir une version officielle ou installée, d’installer un loader et de modifier ses réglages Java, son moteur de rendu et son dossier de jeu. Les modpacks Snake N3st conservent leur gestion habituelle.
+
+Touchez un profil personnel pour **Jouer**, **Modifier** ou ouvrir son dossier. Un appui long sur **Lancer un JAR** ouvre le lancement avec des arguments Java personnalisés. Le Java nécessaire à un profil est téléchargé à la demande en ligne ; les versions entièrement installées peuvent être relancées hors connexion. La session Snake N3st n’est pas transmise aux versions personnelles ni aux JAR.
+
+Désactiver ce mode masque ces outils sans supprimer les profils ni leurs fichiers. Le bouton **Actualiser les modpacks** reste disponible.
+
 ### Réglages Java : global ou par modpack
 
 Dans **Paramètres → Java**, l’allocation de mémoire et les arguments JVM sont les valeurs globales par défaut. Dans **Gestion du modpack → Réglages Java de ce modpack**, chaque option peut suivre la valeur globale ou utiliser une exception propre au pack ; la source active est affichée.

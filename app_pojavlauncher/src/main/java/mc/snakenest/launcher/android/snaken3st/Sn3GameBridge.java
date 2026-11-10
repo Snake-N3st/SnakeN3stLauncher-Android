@@ -126,6 +126,24 @@ public final class Sn3GameBridge {
                 .orElseThrow(() -> new IOException("Inventaire local manquant.")), r.modChoices(slug));
         MinecraftProfile profile = r.localProfile(slug);
         String version = profile.lastVersionId;
+        requireLocalVersion(profile);
+        // Existing accounts are reused verbatim, including the offline UUID used by worlds.
+        String alias = "sn3-" + r.requireSession().playerId();
+        MinecraftAccount account = MinecraftAccount.load(alias);
+        if (account == null) {
+            account = new MinecraftAccount(); account.username = r.cachedUsername();
+            account.profileId = UUID.nameUUIDFromBytes(("OfflinePlayer:"+account.username).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            account.save(new File(Tools.DIR_ACCOUNT_NEW, alias+".json").toString());
+        } else if (!account.isLocal() || !account.username.equals(r.cachedUsername())) throw new IOException("Compte Minecraft local incohérent. Reviens en ligne pour le réparer.");
+        String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        LauncherProfiles.load();
+        LauncherPreferences.DEFAULT_PREF.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();
+        PojavProfile.setCurrentProfile(activity,alias);
+        return new PreparedLaunch(version,r.settings(slug));
+    }
+    /** Checks the selected version without authentication, synchronization or downloads. */
+    static void requireLocalVersion(MinecraftProfile profile) throws IOException {
+        String version = profile.lastVersionId;
         JMinecraftVersionList.Version info;
         try { info = Tools.getVersionInfo(version); }
         catch (RuntimeException e) { throw new IOException("Métadonnées Minecraft locales manquantes. Reviens en ligne pour réparer.", e); }
@@ -153,20 +171,8 @@ public final class Sn3GameBridge {
                 requireLocalFile(Paths.get(Tools.ASSETS_PATH,"objects",hash.substring(0,2),hash),"ressource "+entry.getKey());
             }
         }
-        // Existing accounts are reused verbatim, including the offline UUID used by worlds.
-        String alias = "sn3-" + r.requireSession().playerId();
-        MinecraftAccount account = MinecraftAccount.load(alias);
-        if (account == null) {
-            account = new MinecraftAccount(); account.username = r.cachedUsername();
-            account.profileId = UUID.nameUUIDFromBytes(("OfflinePlayer:"+account.username).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-            account.save(new File(Tools.DIR_ACCOUNT_NEW, alias+".json").toString());
-        } else if (!account.isLocal() || !account.username.equals(r.cachedUsername())) throw new IOException("Compte Minecraft local incohérent. Reviens en ligne pour le réparer.");
-        String id = UUID.nameUUIDFromBytes(("sn3:"+slug).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-        LauncherProfiles.load();
-        LauncherPreferences.DEFAULT_PREF.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE,id).commit();
-        PojavProfile.setCurrentProfile(activity,alias);
-        return new PreparedLaunch(version,r.settings(slug));
     }
+
     private static boolean localLibraryApplies(JMinecraftVersionList.Arguments.ArgValue.ArgRules[] rules) {
         if (rules != null) for (var rule : rules)
             if ("allow".equals(rule.action) && rule.os != null && "osx".equals(rule.os.name)) return false;

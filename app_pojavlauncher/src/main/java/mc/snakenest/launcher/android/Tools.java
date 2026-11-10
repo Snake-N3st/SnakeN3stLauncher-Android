@@ -1534,10 +1534,7 @@ public final class Tools {
     }
 
     public static void installMod(Activity activity, boolean customJavaArgs) {
-        if (MultiRTUtils.getExactJreName(8) == null) {
-            Toast.makeText(activity, R.string.multirt_nojava8rt, Toast.LENGTH_LONG).show();
-            return;
-        }
+        // JavaGUILauncherActivity detects the JAR target and installs a compatible runtime on demand.
 
         if(!customJavaArgs){ // Launch the intent to get the jar file
             if(!(activity instanceof LauncherActivity))

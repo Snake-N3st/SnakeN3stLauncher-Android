@@ -52,7 +52,8 @@ public class ProfileTypeSelectFragment extends Fragment {
     }
 
     private void tryInstall(Class<? extends Fragment> fragmentClass, String tag){
-        if(!hasOnlineProfile()){
+        if(!hasOnlineProfile() && !(mc.snakenest.launcher.android.snaken3st.UnrestrictedMode.enabled(requireContext())
+                && mc.snakenest.launcher.android.snaken3st.Sn3GameBridge.hasSession(requireContext()))){
             hasNoOnlineProfileDialog(requireActivity());
         } else {
             Tools.swapFragment(requireActivity(), fragmentClass, tag, null);
