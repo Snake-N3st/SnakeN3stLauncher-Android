@@ -98,6 +98,11 @@ public final class SnakeUi extends ContextWrapper {
         menu.findViewById(R.id.news_button).setEnabled(!repo.offlineMode);
         boolean unrestricted=UnrestrictedMode.enabled(host);
         ((TextView)menu.findViewById(R.id.install_jar_button)).setText(unrestricted?getString(R.string.sn3_run_jar):repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");
+        android.graphics.drawable.Drawable actionIcon=androidx.appcompat.content.res.AppCompatResources.getDrawable(host,
+                unrestricted?R.drawable.ic_menu_install_jar:R.drawable.sn3_ic_refresh);
+        int actionIconSize=getResources().getDimensionPixelSize(R.dimen._30sdp);
+        actionIcon.setBounds(0,0,actionIconSize,actionIconSize);
+        ((TextView)menu.findViewById(R.id.install_jar_button)).setCompoundDrawablesRelative(actionIcon,null,null,null);
         menu.findViewById(R.id.sn3_personal_versions).setVisibility(unrestricted?View.VISIBLE:View.GONE);
         menu.findViewById(R.id.sn3_refresh_modpacks).setVisibility(unrestricted?View.VISIBLE:View.GONE);
         ((TextView)menu.findViewById(R.id.sn3_refresh_modpacks)).setText(repo.offlineMode?"Revenir en ligne":"Actualiser les modpacks");

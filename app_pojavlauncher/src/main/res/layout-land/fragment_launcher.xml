@@ -67,7 +67,7 @@
                 android:id="@+id/install_jar_button"
                 style="@style/LauncherMenuButton.Universal"
                 android:layout_width="match_parent"
-                android:drawableStart="@drawable/ic_menu_install_jar"
+                android:drawableStart="@drawable/sn3_ic_refresh"
                 android:text="@string/main_install_jar_file"
                 app:layout_constraintTop_toBottomOf="@id/custom_control_button"
                 tools:layout_editor_absoluteX="0dp" />
@@ -85,7 +85,7 @@
                 android:id="@+id/sn3_refresh_modpacks"
                 style="@style/LauncherMenuButton.Universal"
                 android:layout_width="match_parent"
-                android:drawableStart="@drawable/ic_menu_install_jar"
+                android:drawableStart="@drawable/sn3_ic_refresh"
                 android:text="@string/sn3_refresh_modpacks"
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/sn3_personal_versions" />
