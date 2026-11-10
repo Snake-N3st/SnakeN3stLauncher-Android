@@ -141,9 +141,11 @@ public class TouchCharInput extends androidx.appcompat.widget.AppCompatEditText 
         disable();
     }
     private class InputTextWatcher implements android.text.TextWatcher {
-        @Override
-        public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+        private String replacedText = "";
 
+        @Override
+        public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+            if(!mIsDoingInternalChanges) replacedText = text.subSequence(start, start + count).toString();
         }
 
         /**
@@ -155,13 +157,20 @@ public class TouchCharInput extends androidx.appcompat.widget.AppCompatEditText 
         public void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
             if(mIsDoingInternalChanges) return;
             if(mCharacterSender != null){
-                for(int i=0; i < lengthBefore; ++i){
+                // IMEs often replace their whole composing word when appending one letter.
+                // Preserve its unchanged prefix: deleting/retyping it emits synthetic Backspace
+                // events, which legacy Minecraft interprets as delete-word while Ctrl is held.
+                int unchanged = 0;
+                while(unchanged < lengthBefore && unchanged < lengthAfter
+                        && replacedText.charAt(unchanged) == text.charAt(start + unchanged)) unchanged++;
+                // Do not split a UTF-16 pair if a replacement changes only its low surrogate.
+                if(unchanged > 0 && unchanged < lengthBefore && unchanged < lengthAfter
+                        && Character.isHighSurrogate(replacedText.charAt(unchanged - 1))) unchanged--;
+                for(int i=unchanged; i < lengthBefore; ++i){
                     mCharacterSender.sendBackspace();
                 }
-
-                for(int i=start, count = 0; count < lengthAfter; ++i){
+                for(int i=start + unchanged; i < start + lengthAfter; ++i){
                     mCharacterSender.sendChar(text.charAt(i));
-                    ++count;
                 }
             }
         }

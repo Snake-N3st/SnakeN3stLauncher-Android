@@ -18,6 +18,7 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private static final String URL = "https://github.com/Snake-N3st/SnakeN3stLauncher-Android/releases/download/instrumentation/fixture.apk";
     private static final String PLACEHOLDER_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
+    private boolean keyboardChecks;
     private boolean offlineChecks;
     private boolean iconCacheChecks;
     private boolean jvmSettingsChecks;
@@ -28,6 +29,7 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
     private boolean deviceProtectionChecks;
     private boolean deviceAuthUiChecks;
     @Override public void onCreate(Bundle arguments) {
+        keyboardChecks=arguments!=null && "true".equals(arguments.getString("keyboard"));
         offlineChecks=arguments!=null && "true".equals(arguments.getString("offline"));
         iconCacheChecks=arguments!=null && "true".equals(arguments.getString("iconCache"));
         jvmSettingsChecks=arguments!=null && "true".equals(arguments.getString("jvmSettings"));
@@ -43,6 +45,7 @@ public final class UpdateVerifierInstrumentation extends Instrumentation {
 
     @Override public void onStart() {
         super.onStart();
+        if(keyboardChecks) { KeyboardInputChecks.run(this); return; }
         if(deviceAuthUiChecks) { DeviceAuthUiChecks.run(this); return; }
         if(deviceProtectionChecks) { DeviceProtectionChecks.run(this); return; }
         if(offlineChecks) { new OfflineLaunchChecks(this).run(); return; }
